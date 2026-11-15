@@ -1,0 +1,1604 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+<title>Protegiendo el Ñembi Guasu</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: pantalla de juego 16:9 centrada. En pantallas táctiles se suman un joystick (izquierda)
+   y botones de acción (derecha): a los costados en horizontal, debajo del juego en vertical.
+   Estética fija de bosque seco nocturno, por eso un solo tema oscuro. */
+:root{
+  --bg:#101a14;
+  --panel:#1c2b21;
+  --ink:#f1e7c9;
+  --muted:#aab59c;
+  --accent:#e9a43b;
+  --line:#34493b;
+  --act:#7a4a18;
+  --act-held:#a4621e;
+  --sel:#4a4220;
+  --sel-line:#ffd36a;
+  --font-ui:"Trebuchet MS","Segoe UI",system-ui,sans-serif;
+  --font-px:"Lucida Console","Courier New",monospace;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{
+  background:var(--bg);color:var(--ink);font-family:var(--font-ui);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  box-sizing:border-box;padding-block:12px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  touch-action:manipulation;-webkit-tap-highlight-color:transparent;
+}
+#stage{width:100%;max-width:1280px;display:flex;justify-content:center;align-items:center;gap:14px;min-width:0}
+#wrap{width:100%;min-width:0;max-width:min(1280px,calc((100vh - 96px) * 16 / 9));max-width:min(1280px,calc((100dvh - 96px) * 16 / 9))}
+#game{display:block;width:100%;height:auto;aspect-ratio:16/9;max-width:100%;
+  image-rendering:pixelated;image-rendering:crisp-edges;touch-action:none;
+  background:#000;border:2px solid var(--line);border-radius:4px;box-sizing:border-box}
+#game:focus{outline:2px solid var(--accent);outline-offset:2px}
+.bar{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;justify-content:center;
+  width:100%;max-width:1280px;font-size:13px;color:var(--muted);line-height:1.8}
+.bar button,.sbtn,.tbtn{font:inherit;font-size:13px;background:var(--panel);color:var(--ink);
+  border:1px solid var(--line);border-radius:4px;padding:5px 12px;cursor:pointer}
+.bar button:hover{border-color:var(--accent)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+kbd{font-family:var(--font-px);font-size:12px;background:var(--panel);border:1px solid var(--line);
+  border-radius:3px;padding:0 5px;color:var(--ink)}
+
+/* --- Controles táctiles (solo con body.touch) --- */
+.touch-only,.rotate{display:none}
+.touch-only{flex-direction:column;align-items:center;gap:8px;
+  touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+#joy{position:relative;width:116px;height:116px;border-radius:50%;flex:none;
+  background:radial-gradient(circle,var(--panel) 0 58%,var(--bg) 60%);border:2px solid var(--line);touch-action:none}
+#joy::before{content:"";position:absolute;inset:12px;border-radius:50%;border:1px dashed var(--line)}
+#knob{position:absolute;left:50%;top:50%;width:50px;height:50px;margin:-25px 0 0 -25px;border-radius:50%;
+  background:var(--panel);border:2px solid var(--accent);box-shadow:0 3px 0 rgba(0,0,0,.5);pointer-events:none}
+#joy.active{border-color:var(--accent)}
+#joy.active #knob{background:var(--act)}
+.sys,.tools{display:flex;gap:6px}
+.sbtn{font-size:12px;padding:0;width:55px;height:32px}
+.tbtn{width:50px;height:46px;padding:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  font-family:var(--font-px);font-size:15px;font-weight:bold;line-height:1.1}
+.tbtn small,#actBtn small{font-family:var(--font-ui);font-weight:normal;font-size:10px;color:var(--muted)}
+.tbtn[aria-pressed="true"]{background:var(--sel);border-color:var(--sel-line)}
+.tbtn[aria-pressed="true"] small{color:var(--ink)}
+#actBtn{width:90px;height:90px;border-radius:50%;padding:0;cursor:pointer;
+  background:var(--act);border:3px solid var(--accent);color:var(--ink);box-shadow:0 3px 0 rgba(0,0,0,.5);
+  font-family:var(--font-px);font-size:28px;font-weight:bold;line-height:1;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+#actBtn small{font-size:11px;font-weight:bold;color:var(--ink);max-width:82px;text-align:center}
+.held,#actBtn.held{background:var(--act-held);transform:translateY(2px)}
+.rotate{margin:0;font-size:13px;color:var(--muted);text-align:center}
+
+body.touch .bar{display:none}
+body.touch .touch-only{display:flex}
+body.touch #stage{display:grid;grid-template-columns:1fr 1fr;grid-template-areas:"game game" "pad btns";align-items:center;gap:14px 12px}
+body.touch #wrap{grid-area:game;max-width:100%}
+body.touch #padZone{grid-area:pad;justify-self:start}
+body.touch #btnZone{grid-area:btns;justify-self:end}
+@media (orientation:landscape){
+  body.touch #stage{grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"pad game btns";max-width:none}
+  body.touch #wrap{justify-self:center;max-width:calc((100vh - 28px) * 16 / 9);max-width:calc((100dvh - 28px) * 16 / 9)}
+}
+@media (orientation:portrait){ body.touch .rotate{display:block} }
+@media (prefers-reduced-motion:reduce){ .held,#actBtn.held{transform:none} }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="padZone" class="touch-only">
+    <div id="joy" aria-label="Joystick: arrastra para caminar"><div id="knob"></div></div>
+    <div class="sys">
+      <button id="pauseBtn" class="sbtn" type="button">Pausa</button>
+      <button id="muteBtn2" class="sbtn" type="button" aria-pressed="false">Sonido</button>
+    </div>
+  </div>
+  <div id="wrap">
+    <canvas id="game" width="960" height="540" tabindex="0" aria-label="Juego: Protegiendo el Ñembi Guasu. Se juega con teclado o con controles táctiles."></canvas>
+  </div>
+  <div id="btnZone" class="touch-only">
+    <div class="tools">
+      <button class="tbtn" type="button" data-tool="1" aria-pressed="true">1<small>Cámara</small></button>
+      <button class="tbtn" type="button" data-tool="2" aria-pressed="false">2<small id="waterLbl">Agua 10</small></button>
+      <button class="tbtn" type="button" data-tool="3" aria-pressed="false">3<small>Rastrillo</small></button>
+    </div>
+    <button id="actBtn" type="button" aria-label="Acción (E)">E<small id="actLbl">Usar</small></button>
+  </div>
+</div>
+<p class="rotate">Gira el teléfono a horizontal para ver mejor el juego.</p>
+<div class="bar">
+  <button id="muteBtn" type="button" aria-pressed="false">Sonido: activado</button>
+  <span><kbd>WASD</kbd>/<kbd>Flechas</kbd> mover · <kbd>E</kbd> usar / hablar · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> herramienta · <kbd>M</kbd> silenciar · <kbd>P</kbd> pausa</span>
+  <span>Si el teclado no responde, haz clic sobre el juego.</span>
+</div>
+
+<script>
+'use strict';
+/* =====================================================================
+   PROTEGIENDO EL ÑEMBI GUASU  (campamento base: Ñembi Misi)
+   Secciones:
+   1. Configuración        6. Mapa y mundo        11. HUD
+   2. Utilidades           7. Entidades           12. Pantallas
+   3. Audio                8. Fuego               13. Bucle principal
+   4. Entrada (teclado)    9. Eventos del día
+   5. Sprites (pixel art) 10. Interacción y herramientas
+   ===================================================================== */
+
+/* ===================== 1. CONFIGURACIÓN ===================== */
+const CFG = {
+  W: 960, H: 540, SCALE: 3, TILE: 16,
+  MAP_W: 56, MAP_H: 40,
+  DAY_SECONDS: 240,              // duración real de la jornada (4 min)
+  DAY_START: 6 * 60,             // 06:00
+  DAY_END: 20 * 60,              // 20:00
+  WATER_MAX: 10,
+  PLAYER_SPEED: 4.4,             // casillas por segundo
+  FIRE_TICK: 1.0,                // segundos entre intentos de propagación
+  FIRE_BURN_TIME: 12,            // segundos que arde una casilla de bosque
+  FIRE_CORE_MULT: 2.5,           // el foco inicial arde más tiempo (evita que se apague solo)
+  SPREAD: { tree: 0.032, grass: 0.055, bush: 0.05, stump: 0.02 }, // prob. de contagio por segundo
+  DOC_TIME: 2.2,                 // segundos para documentar una tala
+  TRUST_START: 30,
+  TIP_TRUST: 45,                 // confianza a partir de la cual los vecinos avisan
+};
+const T = CFG.TILE, S = CFG.SCALE;
+const VIEW_W = CFG.W / S, VIEW_H = CFG.H / S;
+const MIN_PER_SEC = (CFG.DAY_END - CFG.DAY_START) / CFG.DAY_SECONDS;
+
+// Tipos de casilla
+const TL = { GRASS:0, TREE:1, PATH:2, STUMP:3, BURNT:4, BREAK:5, WATER:6, FLOOR:7,
+             BUILDING:8, VILLAGE:9, FENCE:10, ROCK:11, BUSH:12 };
+// solid: bloquea el paso · speed: multiplicador de velocidad · fuel: tipo de combustible
+const TILE_INFO = {
+  [TL.GRASS]:   { solid:false, speed:1.0,  fuel:'grass' },
+  [TL.TREE]:    { solid:false, speed:0.6,  fuel:'tree'  },
+  [TL.PATH]:    { solid:false, speed:1.25, fuel:null    },
+  [TL.STUMP]:   { solid:false, speed:0.85, fuel:'stump' },
+  [TL.BURNT]:   { solid:false, speed:0.95, fuel:null    },
+  [TL.BREAK]:   { solid:false, speed:1.05, fuel:null    },
+  [TL.WATER]:   { solid:true,  speed:0,    fuel:null    },
+  [TL.FLOOR]:   { solid:false, speed:1.2,  fuel:null    },
+  [TL.BUILDING]:{ solid:true,  speed:0,    fuel:null    },
+  [TL.VILLAGE]: { solid:false, speed:1.15, fuel:null    },
+  [TL.FENCE]:   { solid:true,  speed:0,    fuel:null    },
+  [TL.ROCK]:    { solid:true,  speed:0,    fuel:null    },
+  [TL.BUSH]:    { solid:false, speed:0.8,  fuel:'bush'  },
+};
+const TOOLS = [
+  { id:1, name:'Cámara',   hint:'Mantén E junto a un claro talado' },
+  { id:2, name:'Agua',     hint:'E: rociar la casilla de enfrente' },
+  { id:3, name:'Rastrillo',hint:'Mantén E: limpiar para cortafuego' },
+];
+
+/* ===================== 2. UTILIDADES ===================== */
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const rnd = Math.random;
+const ri = (a, b) => Math.floor(a + rnd() * (b - a + 1));
+const pick = arr => arr[Math.floor(rnd() * arr.length)];
+function shuffle(arr) { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; }
+// Direcciones (índice 0 = Norte, en sentido horario)
+const DIR_NAMES = ['norte','noreste','este','sureste','sur','suroeste','oeste','noroeste'];
+const DIR_SHORT = ['N','NE','E','SE','S','SO','O','NO'];
+const DIR_VEC = DIR_NAMES.map((_, i) => { const a = i * Math.PI / 4; return { x: Math.sin(a), y: -Math.cos(a) }; });
+function dirIndex(dx, dy) { const a = Math.atan2(dx, -dy); return ((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8; }
+function fmtClock(min) { const h = Math.floor(min / 60), m = Math.floor(min % 60); return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0'); }
+
+/* ===================== 3. AUDIO (Web Audio API) ===================== */
+const Sound = {
+  ctx: null, master: null, muted: false, noiseBuf: null,
+  init() {
+    if (this.ctx) return;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new AC();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = this.muted ? 0 : 0.5;
+      this.master.connect(this.ctx.destination);
+      const len = this.ctx.sampleRate;
+      this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+      const d = this.noiseBuf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    } catch (e) { this.ctx = null; }
+  },
+  resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); },
+  setMuted(m) { this.muted = m; if (this.master) this.master.gain.value = m ? 0 : 0.5; },
+  tone(freq, dur, type = 'square', vol = 0.2, slideTo = null, delay = 0) {
+    if (!this.ctx || this.muted) return;
+    const t = this.ctx.currentTime + delay;
+    const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + dur + 0.03);
+  },
+  noise(dur, vol = 0.2, freq = 1000, ftype = 'lowpass', delay = 0) {
+    if (!this.ctx || this.muted) return;
+    const t = this.ctx.currentTime + delay;
+    const src = this.ctx.createBufferSource(); src.buffer = this.noiseBuf;
+    const f = this.ctx.createBiquadFilter(); f.type = ftype; f.frequency.value = freq;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    src.connect(f); f.connect(g); g.connect(this.master);
+    src.start(t, Math.random() * 0.5); src.stop(t + dur + 0.03);
+  },
+  chainsaw(vol) {
+    if (!this.ctx || this.muted || vol < 0.02) return;
+    const t = this.ctx.currentTime, dur = 1.1;
+    const o = this.ctx.createOscillator(), lfo = this.ctx.createOscillator();
+    const lg = this.ctx.createGain(), f = this.ctx.createBiquadFilter(), g = this.ctx.createGain();
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(85, t); o.frequency.linearRampToValueAtTime(130, t + 0.3);
+    o.frequency.linearRampToValueAtTime(110, t + dur);
+    lfo.frequency.value = 22; lg.gain.value = 25; lfo.connect(lg); lg.connect(o.frequency);
+    f.type = 'lowpass'; f.frequency.value = 900 + 1200 * vol;
+    g.gain.setValueAtTime(0.0008, t); g.gain.linearRampToValueAtTime(0.16 * vol, t + 0.08);
+    g.gain.setValueAtTime(0.16 * vol, t + dur - 0.2); g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    o.connect(f); f.connect(g); g.connect(this.master);
+    o.start(t); lfo.start(t); o.stop(t + dur + 0.05); lfo.stop(t + dur + 0.05);
+  },
+  sfx(name, vol = 1) {
+    if (!this.ctx || this.muted) return;
+    switch (name) {
+      case 'blip':    this.tone(660, 0.06, 'square', 0.10 * vol); break;
+      case 'select':  this.tone(520, 0.05, 'square', 0.09); this.tone(780, 0.07, 'square', 0.09, null, 0.05); break;
+      case 'talk':    this.tone(280 + Math.random() * 180, 0.035, 'triangle', 0.10); break;
+      case 'step':    this.noise(0.03, 0.04, 500); break;
+      case 'spray':   this.noise(0.4, 0.22, 2600, 'bandpass'); this.noise(0.25, 0.08, 800, 'lowpass', 0.05); break;
+      case 'hiss':    this.noise(0.5, 0.12, 5000, 'highpass'); break;
+      case 'chop':    this.noise(0.07, 0.25, 700); this.tone(140, 0.08, 'square', 0.08, 70); break;
+      case 'rake':    this.noise(0.12, 0.10, 1400, 'bandpass'); break;
+      case 'shutter': this.noise(0.03, 0.3, 4000, 'highpass'); this.noise(0.05, 0.25, 3000, 'highpass', 0.09); break;
+      case 'success': [523, 659, 784, 1046].forEach((f, i) => this.tone(f, 0.12, 'square', 0.08, null, i * 0.08)); break;
+      case 'alert':   [880, 660, 880].forEach((f, i) => this.tone(f, 0.11, 'square', 0.09, null, i * 0.14)); break;
+      case 'radio':   this.noise(0.12, 0.06, 2000, 'bandpass'); this.tone(1200, 0.05, 'square', 0.05, null, 0.12); break;
+      case 'refill':  this.tone(260, 0.35, 'sine', 0.15, 620); this.noise(0.35, 0.06, 1200, 'bandpass'); break;
+      case 'fail':    this.tone(220, 0.15, 'square', 0.09, 130); break;
+      case 'trust':   this.tone(660, 0.1, 'triangle', 0.12); this.tone(990, 0.16, 'triangle', 0.12, null, 0.09); break;
+      case 'crackle':
+        for (let i = 0; i < 4; i++) this.noise(0.025, 0.14 * vol, 1200 + Math.random() * 2500, 'bandpass', Math.random() * 0.35);
+        break;
+      case 'end':     [392, 330, 262, 392, 523].forEach((f, i) => this.tone(f, 0.22, 'triangle', 0.12, null, i * 0.18)); break;
+    }
+  },
+};
+
+/* ===================== 4. ENTRADA (teclado) ===================== */
+const Input = {
+  down: new Set(), pressed: new Set(),
+  init() {
+    window.addEventListener('keydown', e => {
+      const k = normKey(e);
+      if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k)) e.preventDefault();
+      if (!this.down.has(k)) this.pressed.add(k);
+      this.down.add(k);
+      Sound.init(); Sound.resume();
+    });
+    window.addEventListener('keyup', e => this.down.delete(normKey(e)));
+    window.addEventListener('blur', () => this.down.clear());
+  },
+  isDown(...ks) { return ks.some(k => this.down.has(k)); },
+  hit(...ks) { return ks.some(k => this.pressed.has(k)); },
+  endFrame() { this.pressed.clear(); },
+  // Teclas virtuales (botones táctiles y toques en pantalla)
+  press(k) { if (!this.down.has(k)) this.pressed.add(k); this.down.add(k); },
+  release(k) { this.down.delete(k); },
+  tap(k) { this.pressed.add(k); },
+};
+function normKey(e) { return (e.key || '').toLowerCase(); }
+
+/* ===================== 4b. CONTROLES TÁCTILES ===================== */
+// Joystick (izquierda) + botón E, herramientas, pausa y sonido (derecha/izquierda).
+// Se activan solos en pantallas táctiles o al primer toque.
+const Touch = {
+  on: false, jx: 0, jy: 0, joyId: null, last: {},
+  enable() { if (this.on) return; this.on = true; document.body.classList.add('touch'); },
+  init() {
+    if (window.matchMedia && matchMedia('(pointer: coarse)').matches) this.enable();
+    window.addEventListener('touchstart', () => this.enable(), { once: true, passive: true });
+    const unlock = () => { Sound.init(); Sound.resume(); };
+    for (const ev of ['touchend', 'click', 'pointerdown']) document.addEventListener(ev, unlock, { passive: true });
+    // Joystick analógico
+    const joy = document.getElementById('joy'), knob = document.getElementById('knob'), REACH = 40;
+    const setKnob = () => { knob.style.transform = `translate(${this.jx * REACH}px, ${this.jy * REACH}px)`; };
+    const move = e => {
+      const r = joy.getBoundingClientRect();
+      let dx = (e.clientX - (r.left + r.width / 2)) / REACH, dy = (e.clientY - (r.top + r.height / 2)) / REACH;
+      const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; }
+      this.jx = dx; this.jy = dy; setKnob();
+    };
+    joy.addEventListener('pointerdown', e => { e.preventDefault(); this.enable(); this.joyId = e.pointerId; try { joy.setPointerCapture(e.pointerId); } catch (_) {} joy.classList.add('active'); move(e); });
+    joy.addEventListener('pointermove', e => { if (e.pointerId === this.joyId) move(e); });
+    const end = e => { if (e.pointerId !== this.joyId) return; this.joyId = null; this.jx = this.jy = 0; setKnob(); joy.classList.remove('active'); };
+    for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) joy.addEventListener(ev, end);
+    // Botones que se pueden mantener presionados (E para documentar o limpiar)
+    const holdBtn = (el, keyFn) => {
+      el.addEventListener('pointerdown', e => {
+        e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch (_) {}
+        el._key = keyFn(); el.classList.add('held'); Input.press(el._key);
+      });
+      const up = () => { if (!el._key) return; el.classList.remove('held'); Input.release(el._key); el._key = null; };
+      for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) el.addEventListener(ev, up);
+    };
+    holdBtn(document.getElementById('actBtn'), () => Game.state === 'play' ? 'e' : Game.state === 'paused' ? 'p' : 'enter');
+    this.tbtns = [...document.querySelectorAll('.tbtn')];
+    for (const b of this.tbtns) holdBtn(b, () => b.dataset.tool);
+    holdBtn(document.getElementById('pauseBtn'), () => 'p');
+    document.getElementById('muteBtn2').addEventListener('click', () => toggleMute());
+    for (const z of document.querySelectorAll('.touch-only')) z.addEventListener('contextmenu', e => e.preventDefault());
+    this.actLbl = document.getElementById('actLbl'); this.waterLbl = document.getElementById('waterLbl');
+    this.pauseBtn = document.getElementById('pauseBtn');
+  },
+  // Etiquetas de los botones según lo que hace E en este momento
+  sync() {
+    if (!this.on) return;
+    let lbl;
+    if (Game.state === 'paused') lbl = 'Seguir';
+    else if (Game.state !== 'play') lbl = 'OK';
+    else if (Game.dialog) lbl = 'Seguir';
+    else {
+      const k = Game.prompt && Game.prompt.kind;
+      lbl = k === 'talk' ? 'Hablar' : k === 'post' ? (Game.sites.some(s => s.documented && !s.reported) ? 'Denunciar' : 'Recargar')
+        : k === 'refill' ? 'Recargar' : k === 'doc' ? 'Fotografiar' : k === 'spray' ? 'Rociar' : k === 'rake' ? 'Limpiar'
+        : ['Cámara', 'Rociar', 'Limpiar'][Player.tool - 1];
+    }
+    this.set('act', lbl, v => { this.actLbl.textContent = v; });
+    this.set('water', 'Agua ' + Player.water, v => { this.waterLbl.textContent = v; });
+    this.set('tool', Player.tool, v => { for (const b of this.tbtns) b.setAttribute('aria-pressed', String(+b.dataset.tool === v)); });
+    this.set('pause', Game.state === 'paused' ? 'Seguir' : 'Pausa', v => { this.pauseBtn.textContent = v; });
+  },
+  set(key, v, fn) { if (this.last[key] !== v) { this.last[key] = v; fn(v); } },
+};
+
+/* ===================== 5. SPRITES (pixel art dibujado con código) ===================== */
+const PAL = {
+  grass: ['#c4b466', '#b0a052', '#d4c67e', '#a69248'],
+  tree:  ['#6e8a3b', '#58722d', '#86a04a', '#3f5421'],
+  treeDry: ['#a48d3d', '#8a7430', '#bea552', '#6a5a24'],
+  trunk: ['#6b4a2b', '#4c331c'],
+  path:  ['#caa56c', '#b48e59', '#ddbc87'],
+  soil:  ['#8a6440', '#76532f', '#a27b51'],
+  burnt: ['#2f2a26', '#3e3631', '#1e1a17', '#4a3f38'],
+  water: ['#3d78a8', '#2d5f8a', '#5b97c4', '#a6d0ea'],
+  village: ['#bba27f', '#a88e6c', '#cdb592'],
+  floor: ['#a98b66', '#977a57', '#b99c76'],
+  rock:  ['#8e8b81', '#6e6b63', '#b2afa5', '#55524c'],
+  bush:  ['#7f8b3d', '#98a24b', '#626d2a'],
+  wood:  ['#8b5e34', '#6f4826', '#a57446'],
+  adobe: ['#dbc4a0', '#c4ab86', '#ead6b5'],
+  roof:  ['#a8432c', '#8a3421', '#c25a3c'],
+  roofG: ['#3f6b4a', '#2f5538', '#558a60'],
+};
+function mk(w, h, fn) { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); fn(g, w, h); return c; }
+function px(g, x, y, col, w = 1, h = 1) { g.fillStyle = col; g.fillRect(x, y, w, h); }
+function speckle(g, w, h, cols, n, r) { for (let i = 0; i < n; i++) px(g, Math.floor(r() * w), Math.floor(r() * h), cols[Math.floor(r() * cols.length)]); }
+function disc(g, cx, cy, rad, col) {
+  g.fillStyle = col;
+  for (let y = -rad; y <= rad; y++) for (let x = -rad; x <= rad; x++)
+    if (x * x + y * y <= rad * rad + rad * 0.6) g.fillRect(Math.round(cx + x), Math.round(cy + y), 1, 1);
+}
+function ground(cols, n, seed, extra) {
+  const r = mulberry32(seed);
+  return mk(T, T, (g) => { px(g, 0, 0, cols[0], T, T); speckle(g, T, T, cols.slice(1), n, r); if (extra) extra(g, r); });
+}
+
+const SPR = {};
+function buildSprites() {
+  SPR.grass = [0, 1, 2, 3].map(i => ground(PAL.grass, 26, 11 + i, (g, r) => {
+    for (let k = 0; k < 3; k++) { const x = Math.floor(r() * 14), y = Math.floor(r() * 13); px(g, x, y, PAL.grass[3]); px(g, x + 1, y - 1, PAL.grass[2]); }
+  }));
+  SPR.path = [0, 1].map(i => ground(PAL.path, 22, 30 + i, (g, r) => { px(g, Math.floor(r() * 13), Math.floor(r() * 13), '#9c8a74', 2, 2); }));
+  SPR.soil = ground(PAL.soil, 14, 41, (g) => { for (let y = 2; y < T; y += 4) px(g, 1, y, PAL.soil[2], 14, 1); });
+  SPR.burnt = [0, 1].map(i => ground(PAL.burnt, 30, 50 + i, (g, r) => { if (r() < 0.6) px(g, Math.floor(r() * 14), Math.floor(r() * 14), '#6b2a14'); }));
+  SPR.water = [0, 1].map(i => ground(PAL.water.slice(0, 2), 10, 60, (g, r) => {
+    for (let k = 0; k < 4; k++) { const x = (Math.floor(r() * 12) + i * 3) % 13, y = Math.floor(r() * 14); px(g, x, y, PAL.water[2], 3, 1); }
+    px(g, (4 + i * 6) % 14, 6, PAL.water[3], 2, 1);
+  }));
+  SPR.village = [0, 1].map(i => ground(PAL.village, 20, 70 + i, (g, r) => { if (i) px(g, Math.floor(r() * 12), Math.floor(r() * 12), '#9c8466', 3, 2); }));
+  SPR.floor = ground(PAL.floor, 12, 80, (g) => { for (let y = 3; y < T; y += 5) px(g, 0, y, PAL.floor[1], T, 1); });
+
+  // Árboles (vista 3/4: la copa sobresale hacia arriba). 16x28, pie en y=27
+  const treeSpr = (cols, seed) => mk(16, 28, (g) => {
+    const r = mulberry32(seed);
+    g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(2, 24, 12, 3);
+    px(g, 6, 15, PAL.trunk[0], 4, 11); px(g, 6, 15, PAL.trunk[1], 1, 11); px(g, 5, 25, PAL.trunk[1], 6, 1);
+    disc(g, 8, 9, 7, cols[3]); disc(g, 8, 8, 6, cols[1]);
+    disc(g, 6, 7, 4, cols[0]); disc(g, 10, 9, 4, cols[0]); disc(g, 7, 5, 2, cols[2]);
+    speckle(g, 16, 16, [cols[2], cols[1], cols[3]], 14, r);
+    g.clearRect(0, 0, 2, 2); g.clearRect(14, 0, 2, 2);
+  });
+  SPR.tree = [treeSpr(PAL.tree, 1), treeSpr(PAL.tree, 2), treeSpr(PAL.treeDry, 3), treeSpr(PAL.tree, 4)];
+  SPR.snag = mk(16, 28, (g) => { g.fillStyle = 'rgba(0,0,0,0.2)'; g.fillRect(3, 24, 10, 3); px(g, 7, 12, '#1d1916', 3, 14); px(g, 4, 15, '#1d1916', 3, 1); px(g, 10, 13, '#1d1916', 3, 1); px(g, 8, 18, '#5a2410'); });
+  SPR.stump = mk(16, 16, (g) => {
+    g.fillStyle = 'rgba(0,0,0,0.2)'; g.fillRect(3, 11, 10, 3);
+    px(g, 4, 7, PAL.trunk[0], 8, 6); px(g, 4, 6, '#d9b77e', 8, 2); px(g, 6, 6, '#b8925a', 4, 1); px(g, 4, 12, PAL.trunk[1], 8, 1);
+    px(g, 12, 12, '#d9b77e', 2, 1); px(g, 2, 13, '#c9a46c', 1, 1);
+  });
+  SPR.bush = mk(16, 16, (g) => { g.fillStyle = 'rgba(0,0,0,0.2)'; g.fillRect(2, 12, 12, 3); disc(g, 5, 10, 3, PAL.bush[2]); disc(g, 10, 10, 3, PAL.bush[2]); disc(g, 8, 8, 3, PAL.bush[0]); px(g, 7, 6, PAL.bush[1], 2, 1); px(g, 4, 9, PAL.bush[1]); px(g, 11, 9, PAL.bush[1]); });
+  SPR.rock = mk(16, 16, (g) => { g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(2, 12, 13, 3); disc(g, 8, 9, 5, PAL.rock[3]); disc(g, 8, 8, 5, PAL.rock[0]); disc(g, 6, 6, 2, PAL.rock[2]); px(g, 9, 10, PAL.rock[1], 3, 1); });
+  SPR.fence = mk(16, 16, (g) => { px(g, 0, 6, PAL.wood[0], 16, 2); px(g, 0, 10, PAL.wood[0], 16, 2); px(g, 2, 3, PAL.wood[1], 3, 11); px(g, 11, 3, PAL.wood[1], 3, 11); px(g, 2, 3, PAL.wood[2], 3, 1); px(g, 11, 3, PAL.wood[2], 3, 1); });
+  SPR.fenceV = mk(16, 16, (g) => { px(g, 6, 0, PAL.wood[1], 3, 16); px(g, 5, 2, PAL.wood[0], 5, 2); px(g, 5, 9, PAL.wood[0], 5, 2); });
+
+  // Campamento base Ñembi Misi: 4x3 casillas + techo que sobresale (64 x 64)
+  SPR.post = mk(64, 64, (g) => {
+    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(2, 58, 62, 5);
+    px(g, 2, 24, PAL.wood[0], 60, 36);
+    for (let x = 2; x < 62; x += 6) px(g, x, 24, PAL.wood[1], 1, 36);
+    px(g, 0, 8, PAL.roofG[1], 64, 18); px(g, 2, 4, PAL.roofG[0], 60, 16);
+    for (let y = 6; y < 22; y += 4) px(g, 2, y, PAL.roofG[2], 60, 1);
+    px(g, 0, 22, PAL.roofG[1], 64, 3);
+    px(g, 26, 40, '#3a2414', 12, 20); px(g, 27, 41, '#5b3a20', 10, 19); px(g, 35, 50, '#d9b77e', 1, 2); // puerta
+    px(g, 7, 34, '#2a3d4a', 12, 10); px(g, 8, 35, '#7fb3cf', 10, 8); px(g, 13, 35, '#2a3d4a', 1, 8); // ventana
+    px(g, 45, 34, '#2a3d4a', 12, 10); px(g, 46, 35, '#7fb3cf', 10, 8); px(g, 51, 35, '#2a3d4a', 1, 8);
+    px(g, 18, 26, '#e7d7a8', 28, 7); px(g, 19, 27, '#2f5538', 26, 5); // letrero
+    px(g, 56, 0, '#cfcfcf', 1, 10); px(g, 57, 1, '#3b7fc4', 5, 2); px(g, 57, 3, '#f2f2f2', 5, 1); px(g, 57, 4, '#3b9a4a', 5, 2); // bandera
+  });
+  SPR.tank = mk(16, 28, (g) => {
+    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(1, 24, 14, 3);
+    px(g, 3, 16, '#5a4a3a', 2, 10); px(g, 11, 16, '#5a4a3a', 2, 10);
+    px(g, 1, 2, '#3e6f93', 14, 15); px(g, 1, 2, '#5d92b8', 14, 2); px(g, 2, 8, '#2f5a7a', 12, 1); px(g, 6, 20, '#8fb7d4', 4, 2);
+  });
+  // Casas del pueblo: 3x2 casillas + techo (48 x 48)
+  const house = (roof, seed) => mk(48, 48, (g) => {
+    const r = mulberry32(seed);
+    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(2, 43, 46, 4);
+    px(g, 3, 20, PAL.adobe[0], 42, 25); speckle(g, 42, 25, [PAL.adobe[1], PAL.adobe[2]], 40, r);
+    px(g, 0, 6, roof[1], 48, 16); px(g, 2, 2, roof[0], 44, 16);
+    for (let y = 4; y < 18; y += 3) for (let x = 2 + (y % 2) * 2; x < 46; x += 4) px(g, x, y, roof[2], 2, 1);
+    px(g, 20, 30, '#4a2e19', 9, 15); px(g, 21, 31, '#6b4426', 7, 14);
+    px(g, 7, 27, '#3a2a1a', 8, 7); px(g, 8, 28, '#e7c66b', 6, 5); px(g, 34, 27, '#3a2a1a', 8, 7); px(g, 35, 28, '#e7c66b', 6, 5);
+  });
+  SPR.house = [house(PAL.roof, 5), house(['#7a6a52', '#5f5240', '#968366'], 6), house(PAL.roof, 7)];
+}
+
+/* --- Personajes (se dibujan cada cuadro, 12x19 px, pie en (x,y)) --- */
+const LOOKS = {
+  ranger: { skin:'#d9a477', shirt:'#8a8a4a', shirt2:'#6f6f38', pants:'#5a4a32', hat:'#7a5a2e', brim:true,  badge:true },
+  rosa:   { skin:'#b97c55', shirt:'#c0466a', shirt2:'#9a3352', pants:'#3a4a7a', hair:'#2a1a12', skirt:true },
+  ramon:  { skin:'#a86e48', shirt:'#d9d0b8', shirt2:'#b8ad92', pants:'#4a3a2a', hat:'#e0cf96', brim:true },
+  lucia:  { skin:'#c48a5e', shirt:'#4a8ac0', shirt2:'#36689a', pants:'#4a3a6a', hair:'#3a2216', small:true },
+  logger: { skin:'#c49064', shirt:'#b43a2a', shirt2:'#8a2a1e', pants:'#2e3440', hat:'#e0a020', helmet:true, saw:true },
+};
+function drawPerson(g, x, y, dir, frame, look, alpha = 1) {
+  x = Math.round(x); y = Math.round(y);
+  const sm = look.small ? 2 : 0;
+  g.globalAlpha = 0.25 * alpha; g.fillStyle = '#000'; g.fillRect(x - 5, y - 1, 10, 3); g.globalAlpha = alpha;
+  const step = frame % 2 === 1 ? 1 : 0;
+  // piernas
+  if (dir === 1 || dir === 2) { px(g, x - 2 + (step ? 1 : -1), y - 5, look.pants, 2, 5); px(g, x + (step ? -1 : 1), y - 5, look.pants, 2, 5); }
+  else { px(g, x - 3, y - 5 + (step ? -1 : 0), look.pants, 2, 5 - (step ? -1 : 0)); px(g, x + 1, y - 5 + (step ? 0 : -1), look.pants, 2, 5); }
+  px(g, x - 3, y - 1, '#2a1e14', 2, 1); px(g, x + 1, y - 1, '#2a1e14', 2, 1);
+  // cuerpo
+  const top = y - 12 + sm;
+  if (look.skirt) px(g, x - 4, y - 7, look.pants, 8, 3);
+  px(g, x - 4, top, look.shirt, 8, 7 - sm); px(g, x - 4, top + 5 - sm, look.shirt2, 8, 1);
+  if (look.badge && dir === 0) { px(g, x + 1, top + 1, '#e8c547'); px(g, x - 3, top + 1, '#4a5a2a', 1, 2); }
+  // brazos
+  const sw = frame % 2 === 1 ? 1 : -1;
+  if (dir === 0 || dir === 3) { px(g, x - 6, top + 1 + sw, look.shirt2, 2, 5); px(g, x + 4, top + 1 - sw, look.shirt2, 2, 5); px(g, x - 6, top + 5 + sw, look.skin, 2, 1); px(g, x + 4, top + 5 - sw, look.skin, 2, 1); }
+  else { const ax = dir === 1 ? x - 1 + sw : x - 1 - sw; px(g, ax, top + 1, look.shirt2, 2, 5); px(g, ax, top + 5, look.skin, 2, 1); }
+  // motosierra
+  if (look.saw) { const sx = dir === 1 ? x - 10 : x + 4; px(g, sx, top + 3, '#e07a10', 5, 3); px(g, dir === 1 ? sx - 5 : sx + 5, top + 4, '#b8b8b8', 5, 1); }
+  // cabeza
+  const hy = top - 6;
+  px(g, x - 3, hy, look.skin, 6, 6);
+  if (look.hair) { px(g, x - 3, hy - 1, look.hair, 6, 2); if (dir === 3) px(g, x - 3, hy, look.hair, 6, 5); else { px(g, x - 4, hy, look.hair, 1, 4); px(g, x + 3, hy, look.hair, 1, 4); } }
+  if (dir === 0) { px(g, x - 2, hy + 2, '#1a1410'); px(g, x + 1, hy + 2, '#1a1410'); }
+  else if (dir === 1) px(g, x - 2, hy + 2, '#1a1410');
+  else if (dir === 2) px(g, x + 1, hy + 2, '#1a1410');
+  if (look.hat) {
+    if (look.helmet) { px(g, x - 4, hy - 2, look.hat, 8, 3); px(g, x - 4, hy + 1, '#a07010', 8, 1); }
+    else { px(g, x - 3, hy - 3, look.hat, 6, 3); px(g, x - 6, hy, look.hat, 12, 1); px(g, x - 3, hy - 1, '#4a3418', 6, 1); }
+  }
+  g.globalAlpha = 1;
+}
+
+/* --- Llamas animadas sobre una casilla en llamas --- */
+function drawFlames(g, x, y, t, k, intensity) {
+  const n = 3;
+  for (let i = 0; i < n; i++) {
+    const ph = t * 9 + k * 1.7 + i * 2.1;
+    const fx = x + 3 + i * 4 + Math.round(Math.sin(ph) * 1);
+    const h = Math.round((5 + 6 * intensity) * (0.75 + 0.25 * Math.sin(ph * 1.3)));
+    px(g, fx - 1, y + 14 - h, '#c83a12', 4, h);
+    px(g, fx, y + 14 - h + 2, '#f07a1a', 3, h - 2);
+    px(g, fx, y + 14 - Math.round(h * 0.5), '#ffd23a', 2, Math.round(h * 0.5) - 1);
+  }
+}
+
+/* ===================== 6. MAPA Y MUNDO ===================== */
+const World = {
+  w: CFG.MAP_W, h: CFG.MAP_H,
+  tiles: null, variant: null, orig: null, burn: null, burnMax: null, fireId: null, wet: null,
+  buildings: [], initialTrees: 0,
+};
+// Lugares con nombre del mapa (en casillas)
+const LM = {
+  door: { x: 25.9, y: 29.6 },               // puerta del campamento Ñembi Misi
+  pondCenter: { x: 8, y: 27 },
+  clearing: { x: 21, y: 9 },
+  village: { x: 43, y: 24, w: 13, h: 16 },
+  heatZones: [
+    { name: 'El Claro', x: 15, y: 8 },
+    { name: 'Ladera Oeste', x: 5, y: 15 },
+    { name: 'Quebrada Sur', x: 17, y: 37 },
+    { name: 'Bosque Este', x: 40, y: 14 },
+  ],
+  logSites: [
+    { name: 'Monte Norte', x: 32, y: 4 },
+    { name: 'Loma Noreste', x: 48, y: 9 },
+    { name: 'Loma Noroeste', x: 7, y: 5 },
+    { name: 'Quebrada Sur', x: 10, y: 36 },
+    { name: 'Bosque Central', x: 35, y: 20 },
+  ],
+  chaco: { name: 'Chaco de Don Ramón', x: 35, y: 36 },
+};
+const idx = (x, y) => y * World.w + x;
+const inMap = (x, y) => x >= 0 && y >= 0 && x < World.w && y < World.h;
+const tileAt = (x, y) => inMap(x, y) ? World.tiles[idx(x, y)] : TL.ROCK;
+function setTile(x, y, t) { if (inMap(x, y)) World.tiles[idx(x, y)] = t; }
+function isSolidAt(tx, ty) {
+  if (tx < 1 || ty < 1 || tx >= World.w - 1 || ty >= World.h - 1) return true; // borde del mapa
+  const i = idx(tx, ty);
+  if (World.burn[i] > 0) return true; // no se puede atravesar el fuego
+  return TILE_INFO[World.tiles[i]].solid;
+}
+function inVillage(x, y) { const v = LM.village; return x >= v.x - 1 && y >= v.y - 1 && x < v.x + v.w && y < v.y + v.h; }
+function countTrees() { let n = 0; for (let i = 0; i < World.tiles.length; i++) if (World.tiles[i] === TL.TREE) n++; return n; }
+
+function genMap() {
+  const W = World.w, H = World.h, N = W * H;
+  World.tiles = new Uint8Array(N); World.variant = new Uint8Array(N); World.orig = new Uint8Array(N);
+  World.burn = new Float32Array(N); World.burnMax = new Float32Array(N); World.fireId = new Int16Array(N); World.wet = new Float32Array(N);
+  World.buildings = [];
+  const r = mulberry32(20261114);
+  // Ruido suave para formar manchas de bosque denso y claros naturales
+  const G = 7, gw = Math.ceil(W / G) + 2, grid = [];
+  for (let i = 0; i < gw * (Math.ceil(H / G) + 2); i++) grid.push(r());
+  const gv = (x, y) => grid[y * gw + x];
+  const noise = (x, y) => {
+    const gx = x / G, gy = y / G, x0 = Math.floor(gx), y0 = Math.floor(gy);
+    let fx = gx - x0, fy = gy - y0; fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+    return lerp(lerp(gv(x0, y0), gv(x0 + 1, y0), fx), lerp(gv(x0, y0 + 1), gv(x0 + 1, y0 + 1), fx), fy);
+  };
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const v = noise(x, y) * 0.75 + r() * 0.25;
+    const i = idx(x, y);
+    World.tiles[i] = v > 0.34 ? TL.TREE : (r() < 0.3 ? TL.BUSH : TL.GRASS);
+    World.variant[i] = Math.floor(r() * 4);
+  }
+  const ellipse = (cx, cy, rx, ry, fn) => {
+    for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++)
+      if (inMap(x, y) && ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1) fn(x, y);
+  };
+  const rect = (x0, y0, w, h, t) => { for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) setTile(x, y, t); };
+  // El claro (norte)
+  ellipse(LM.clearing.x, LM.clearing.y, 5.5, 4.2, (x, y) => setTile(x, y, r() < 0.1 ? TL.BUSH : TL.GRASS));
+  // Laguna (oeste)
+  ellipse(LM.pondCenter.x, LM.pondCenter.y, 4.6, 3.6, (x, y) => setTile(x, y, TL.GRASS));
+  ellipse(LM.pondCenter.x, LM.pondCenter.y, 3.2, 2.3, (x, y) => setTile(x, y, TL.WATER));
+  // Explanada del campamento Ñembi Misi
+  ellipse(26, 28.5, 7, 5.5, (x, y) => setTile(x, y, TL.GRASS));
+  rect(22, 29, 9, 3, TL.FLOOR);
+  // Chaco de Don Ramón (pastizal seco)
+  rect(35, 33, 7, 6, TL.GRASS);
+  // Pueblo
+  const v = LM.village;
+  rect(v.x, v.y, v.w, v.h, TL.VILLAGE);
+  for (let y = v.y - 1; y < H; y++) if (y !== 30 && y !== 31) { setTile(v.x - 1, y, TL.FENCE); World.variant[idx(v.x - 1, y)] = 1; }
+  for (let x = v.x - 1; x < W; x++) if (x !== 49 && x !== 50) { setTile(x, v.y - 1, TL.FENCE); World.variant[idx(x, v.y - 1)] = 0; }
+  // Senderos
+  const carve = (pts, wd) => {
+    for (let k = 0; k < pts.length - 1; k++) {
+      let [x, y] = pts[k]; const [x1, y1] = pts[k + 1];
+      while (x !== x1 || y !== y1) {
+        for (let a = 0; a < wd; a++) for (let b = 0; b < wd; b++) {
+          const t = tileAt(x + a, y + b);
+          if (t !== TL.BUILDING && t !== TL.WATER && t !== TL.FENCE) setTile(x + a, y + b, TL.PATH);
+        }
+        if (x !== x1) x += Math.sign(x1 - x); else y += Math.sign(y1 - y);
+      }
+    }
+  };
+  carve([[26, 30], [34, 30], [34, 31], [56, 31]], 2);            // al pueblo
+  carve([[30, 29], [30, 22], [24, 22], [24, 14], [22, 14], [22, 10]], 2); // al claro
+  carve([[23, 30], [16, 30], [16, 28], [12, 28]], 1);            // a la laguna
+  carve([[49, 23], [49, 15], [47, 15], [47, 1]], 1);             // del pueblo al monte
+  carve([[24, 14], [33, 14], [33, 6]], 1);                       // sendero de patrulla norte
+  // Edificios
+  const addB = (x, y, w, h, spr) => { rect(x, y, w, h, TL.BUILDING); World.buildings.push({ x, y, w, h, spr }); };
+  addB(24, 26, 4, 3, SPR.post);
+  addB(29, 27, 1, 1, SPR.tank);
+  addB(44, 25, 3, 2, SPR.house[0]); addB(51, 25, 3, 2, SPR.house[1]);
+  addB(44, 34, 3, 2, SPR.house[2]); addB(52, 34, 3, 2, SPR.house[0]);
+  addB(52, 28, 3, 2, SPR.house[1]);
+  // Rocas sueltas en el bosque
+  for (let k = 0; k < 18; k++) {
+    const x = 2 + Math.floor(r() * (W - 4)), y = 2 + Math.floor(r() * (H - 4));
+    if (tileAt(x, y) === TL.TREE || tileAt(x, y) === TL.GRASS) setTile(x, y, TL.ROCK);
+  }
+  World.initialTrees = countTrees();
+}
+
+/* ===================== 7. ENTIDADES ===================== */
+const Player = {
+  x: 0, y: 0, dir: 0, frame: 0, animT: 0, moving: false, tool: 1, water: CFG.WATER_MAX,
+  action: null, sprayCD: 0, stepT: 0,
+  reset() { this.x = LM.door.x; this.y = LM.door.y + 0.6; this.dir = 0; this.tool = 1; this.water = CFG.WATER_MAX; this.action = null; this.sprayCD = 0; },
+  facingTile() { const v = [[0, 1], [-1, 0], [1, 0], [0, -1]][this.dir]; return { x: Math.floor(this.x + v[0] * 0.8), y: Math.floor(this.y - 0.2 + v[1] * 0.8) }; },
+};
+function collides(x, y, r) {
+  const pts = [[x - r, y - 0.3], [x + r, y - 0.3], [x - r, y + 0.05], [x + r, y + 0.05]];
+  for (const [px_, py_] of pts) if (isSolidAt(Math.floor(px_), Math.floor(py_))) return true;
+  return false;
+}
+function moveEntity(e, dx, dy, r = 0.3) {
+  if (dx && !collides(e.x + dx, e.y, r)) e.x += dx;
+  if (dy && !collides(e.x, e.y + dy, r)) e.y += dy;
+}
+function animate(e, dt, moving) {
+  if (moving) { e.animT += dt; if (e.animT > 0.16) { e.animT = 0; e.frame = (e.frame + 1) % 4; } } else e.frame = 0;
+}
+
+// Vecinos del pueblo (diálogos en español)
+const R = 'Guardaparque';
+const NPC_DEFS = [
+  { id: 'rosa', name: 'Doña Rosa', look: 'rosa', x: 47.5, y: 30, trust: 10,
+    lines: [['Doña Rosa', '¡Buenos días, guardaparque! Con este calor hasta la hojarasca parece que quiere prenderse.'],
+            [R, 'Por eso patrullamos. Si ve humo o escucha motosierras, avise al campamento Ñembi Misi lo antes posible.'],
+            ['Doña Rosa', 'Cuente conmigo. Les diré a mis hijos que hoy no hagan fogatas en el monte.']],
+    again: [['Doña Rosa', 'Ánimo, guardaparque. Aquí estamos atentos al humo.']] },
+  { id: 'ramon', name: 'Don Ramón', look: 'ramon', x: 40.5, y: 34.5, trust: 12,
+    lines: [['Don Ramón', 'Buen día. Hoy después del almuerzo pienso quemar el rastrojo de mi chaco para sembrar.'],
+            [R, 'Con esta sequía y este viento, la quema se le puede escapar al monte en minutos.'],
+            [R, 'Puede picar el rastrojo y dejarlo como abono. Si algún día quema, que sea con permiso y con cortafuego.'],
+            ['Don Ramón', 'Tiene razón. Esperaré las lluvias y pediré el permiso. Gracias por venir a explicarme.']],
+    again: [['Don Ramón', 'Hoy no quemo nada, le di mi palabra.']] },
+  { id: 'lucia', name: 'Lucía', look: 'lucia', x: 49, y: 32.5, trust: 8,
+    lines: [['Lucía', '¿Es verdad que en el bosque viven parabas, jochis y tatús?'],
+            [R, 'Sí. Y cuando el bosque se quema o lo talan, se quedan sin casa y sin comida.'],
+            ['Lucía', '¡Voy a contar en mi escuela que no hay que botar vidrios ni basura en el monte!']],
+    again: [['Lucía', '¡Cuando sea grande también voy a ser guardaparque!']] },
+];
+let NPCS = [];
+function resetNPCs() {
+  NPCS = NPC_DEFS.map(d => ({ ...d, home: { x: d.x, y: d.y }, dir: 0, frame: 0, animT: 0, wanderT: 1 + rnd() * 3, tx: d.x, ty: d.y, talked: false }));
+}
+function updateNPCs(dt) {
+  for (const n of NPCS) {
+    n.wanderT -= dt;
+    if (n.wanderT <= 0) { n.wanderT = 2 + rnd() * 4; n.tx = n.home.x + (rnd() - 0.5) * 3; n.ty = n.home.y + (rnd() - 0.5) * 2; }
+    const dx = n.tx - n.x, dy = n.ty - n.y, d = Math.hypot(dx, dy);
+    const near = dist(n.x, n.y, Player.x, Player.y) < 2;
+    const moving = d > 0.1 && !near;
+    if (moving) {
+      const sp = 1.1 * dt; moveEntity(n, dx / d * sp, dy / d * sp, 0.25);
+      n.dir = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 1 : 2) : (dy < 0 ? 3 : 0);
+    } else if (near) {
+      const ax = Player.x - n.x, ay = Player.y - n.y;
+      n.dir = Math.abs(ax) > Math.abs(ay) ? (ax < 0 ? 1 : 2) : (ay < 0 ? 3 : 0);
+    }
+    animate(n, dt, moving);
+  }
+}
+
+/* --- Partículas: humo, gotas, chispas, destello de cámara --- */
+const Particles = {
+  list: [],
+  add(p) { if (this.list.length < 700) this.list.push(p); },
+  update(dt) {
+    const w = Game.windVec();
+    for (const p of this.list) {
+      p.life -= dt;
+      if (p.kind === 'smoke') { p.vx += w.x * 6 * dt; p.vy += w.y * 6 * dt - 2 * dt; p.size += 5 * dt; }
+      if (p.kind === 'drop') p.vy += 60 * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+    }
+    this.list = this.list.filter(p => p.life > 0);
+  },
+  draw(g) {
+    for (const p of this.list) {
+      const a = clamp(p.life / p.max, 0, 1);
+      if (p.kind === 'smoke') { g.globalAlpha = a * 0.45; g.fillStyle = p.col; const s = Math.round(p.size); g.fillRect(Math.round(p.x - s / 2), Math.round(p.y - s / 2), s, s); }
+      else if (p.kind === 'flash') { g.globalAlpha = a * 0.8; g.fillStyle = '#fff'; g.fillRect(Math.round(p.x) - 10, Math.round(p.y) - 10, 20, 20); }
+      else { g.globalAlpha = a; g.fillStyle = p.col; g.fillRect(Math.round(p.x), Math.round(p.y), p.size, p.size); }
+    }
+    g.globalAlpha = 1;
+  },
+};
+
+/* ===================== ESTADO GLOBAL DEL JUEGO ===================== */
+const Game = {
+  state: 'title', clock: CFG.DAY_START, time: 0,
+  windFrom: 1, windStr: 1, humidity: 15, dryness: 1.15,
+  trust: CFG.TRUST_START, reports: 0, waterUsed: 0, breaks: 0, treesCutForBreak: 0,
+  messages: [], incidents: [], sites: [], loggers: [], heat: [], events: [],
+  dialog: null, prompt: null, fireTimer: 0, crackleT: 0,
+  ramonConvinced: false, ramonFired: false,
+  windVec() { const v = DIR_VEC[this.windFrom]; return { x: -v.x * this.windStr, y: -v.y * this.windStr }; },
+  windLabel() { return this.windStr < 0.95 ? 'suave' : this.windStr < 1.25 ? 'moderado' : 'fuerte'; },
+  addTrust(n) { this.trust = clamp(this.trust + n, 0, 100); },
+};
+function msg(text, kind = 'info') {
+  Game.messages.push({ text, kind, t: 0 });
+  if (Game.messages.length > 4) Game.messages.shift();
+}
+
+/* ===================== 8. FUEGO ===================== */
+const fuelOf = t => TILE_INFO[t].fuel;
+function ignite(x, y, inc) {
+  if (!inMap(x, y)) return false;
+  const i = idx(x, y), t = World.tiles[i], f = fuelOf(t);
+  if (!f || World.burn[i] > 0 || World.wet[i] > 0) return false;
+  const bt = CFG.FIRE_BURN_TIME * (f === 'grass' ? 0.55 : f === 'bush' ? 0.7 : f === 'stump' ? 0.8 : 1) * (0.85 + rnd() * 0.3);
+  World.orig[i] = t; World.burn[i] = bt; World.burnMax[i] = bt; World.fireId[i] = inc.id;
+  inc.active++; inc.total++;
+  return true;
+}
+function startFire(zone, radioText) {
+  // Busca una casilla con combustible cerca del centro de la zona
+  let cands = [];
+  for (let r = 0; r <= 4 && cands.length === 0; r++)
+    for (let y = zone.y - r; y <= zone.y + r; y++) for (let x = zone.x - r; x <= zone.x + r; x++)
+      if (inMap(x, y) && fuelOf(tileAt(x, y)) && World.burn[idx(x, y)] === 0) cands.push({ x, y });
+  if (!cands.length) return null;
+  const c = pick(cands);
+  const inc = { id: Game.incidents.length + 1, name: zone.name, x: c.x, y: c.y, active: 0, total: 0, done: false, helped: false, villageHit: false, burntTrees: 0 };
+  Game.incidents.push(inc);
+  ignite(c.x, c.y, inc); ignite(c.x + 1, c.y, inc); ignite(c.x, c.y + 1, inc);
+  for (let i = 0; i < World.burn.length; i++)
+    if (World.fireId[i] === inc.id && World.burn[i] > 0) { World.burn[i] *= CFG.FIRE_CORE_MULT; World.burnMax[i] *= CFG.FIRE_CORE_MULT; }
+  msg(radioText || `Radio: ¡Columna de humo en ${zone.name}! Lleva agua o abre un cortafuego.`, 'alert');
+  Sound.sfx('alert');
+  return inc;
+}
+function douse(x, y) {
+  if (!inMap(x, y)) return false;
+  const i = idx(x, y); let hit = false;
+  if (World.burn[i] > 0) {
+    const prog = 1 - World.burn[i] / World.burnMax[i];
+    const inc = Game.incidents[World.fireId[i] - 1];
+    World.burn[i] = 0; inc.active--; inc.helped = true;
+    if (prog > 0.6) { World.tiles[i] = TL.BURNT; if (World.orig[i] === TL.TREE) inc.burntTrees++; }
+    else World.tiles[i] = World.orig[i]; // salvada a tiempo
+    hit = true;
+    for (let k = 0; k < 4; k++) Particles.add({ kind: 'smoke', x: x * T + 8, y: y * T + 6, vx: (rnd() - 0.5) * 8, vy: -10, size: 3, life: 1.2, max: 1.2, col: '#e8eef2' });
+  }
+  if (fuelOf(World.tiles[i])) World.wet[i] = Math.max(World.wet[i], 30); // la vegetación mojada no arde por un rato
+  return hit;
+}
+const Fire = {
+  update(dt) {
+    const N = World.tiles.length;
+    for (let i = 0; i < N; i++) {
+      if (World.wet[i] > 0) World.wet[i] = Math.max(0, World.wet[i] - dt);
+      if (World.burn[i] > 0) {
+        World.burn[i] -= dt;
+        if (rnd() < dt * 1.6) {
+          const x = i % World.w, y = Math.floor(i / World.w);
+          Particles.add({ kind: 'smoke', x: x * T + 4 + rnd() * 8, y: y * T - 6, vx: 0, vy: -8, size: 3 + rnd() * 3, life: 2.5 + rnd() * 1.5, max: 4, col: rnd() < 0.5 ? '#6a6a6a' : '#8c8c8c' });
+          if (rnd() < 0.3) Particles.add({ kind: 'spark', x: x * T + 8, y: y * T, vx: (rnd() - 0.5) * 20, vy: -20 - rnd() * 20, size: 1, life: 0.7, max: 0.7, col: '#ffcf4a' });
+        }
+        if (World.burn[i] <= 0) this.burnOut(i);
+      }
+    }
+    Game.fireTimer += dt;
+    while (Game.fireTimer >= CFG.FIRE_TICK) { Game.fireTimer -= CFG.FIRE_TICK; this.spread(); }
+    for (const inc of Game.incidents) {
+      if (!inc.done && inc.total > 0 && inc.active <= 0) {
+        inc.done = true; inc.endClock = Game.clock;
+        if (inc.helped) { msg(`Incendio de ${inc.name} controlado. ¡Buen trabajo!`, 'good'); Game.addTrust(4); Sound.sfx('success'); }
+        else msg(`El incendio de ${inc.name} se apagó solo al quedarse sin combustible.`, 'info');
+      }
+    }
+  },
+  burnOut(i) {
+    const inc = Game.incidents[World.fireId[i] - 1];
+    World.burn[i] = 0; World.tiles[i] = TL.BURNT;
+    if (inc) { inc.active--; if (World.orig[i] === TL.TREE) inc.burntTrees++; }
+  },
+  spread() {
+    const w = Game.windVec(), W = World.w;
+    const burning = [];
+    for (let i = 0; i < World.tiles.length; i++) if (World.burn[i] > 0) burning.push(i);
+    for (const i of burning) {
+      const x = i % W, y = Math.floor(i / W);
+      const inc = Game.incidents[World.fireId[i] - 1];
+      const prog = 1 - World.burn[i] / World.burnMax[i];
+      const inten = 0.35 + Math.sin(prog * Math.PI) * 0.65;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        const nx = x + dx, ny = y + dy;
+        if (!inMap(nx, ny)) continue;
+        const ni = idx(nx, ny), f = fuelOf(World.tiles[ni]);
+        if (!f || World.burn[ni] > 0 || World.wet[ni] > 0) continue;
+        const len = Math.hypot(dx, dy);
+        const wf = clamp(1 + 1.5 * (dx * w.x + dy * w.y) / len, 0.08, 2.6);
+        const p = CFG.SPREAD[f] * wf * Game.dryness * inten * (len > 1 ? 0.6 : 1);
+        if (rnd() < p) ignite(nx, ny, inc);
+      }
+      if (inc && !inc.villageHit && x >= LM.village.x - 3 && y >= LM.village.y - 3) {
+        inc.villageHit = true; Game.addTrust(-8);
+        msg('¡El fuego llegó al borde del pueblo! Los vecinos están asustados.', 'alert'); Sound.sfx('alert');
+      }
+    }
+  },
+  nearestBurning(x, y, maxD) {
+    let best = null, bd = maxD;
+    for (let i = 0; i < World.tiles.length; i++) if (World.burn[i] > 0) {
+      const d = dist(x, y, i % World.w + 0.5, Math.floor(i / World.w) + 0.5);
+      if (d < bd) { bd = d; best = { x: i % World.w, y: Math.floor(i / World.w), d }; }
+    }
+    return best;
+  },
+};
+
+/* ===================== 9. EVENTOS DEL DÍA ===================== */
+function buildSchedule() {
+  return [
+    { at: 7 * 60 + 15, run: () => startLogging(0) },
+    { at: 8 * 60 + 30, run: () => startFire(Game.heat[0]) },
+    { at: 10 * 60 + 30, run: windShift },
+    { at: 11 * 60 + 30, run: () => startLogging(1) },
+    { at: 13 * 60 + 15, run: ramonEvent },
+    { at: 14 * 60 + 40, run: () => startFire(Game.heat[1]) },
+    { at: 16 * 60 + 10, run: () => startLogging(2) },
+    { at: 17 * 60 + 10, run: windShift },
+    { at: 18 * 60 + 40, run: () => { msg('Radio: Está anocheciendo. Cierra los pendientes antes de las 20:00.', 'radio'); Sound.sfx('radio'); } },
+  ].map(e => ({ ...e, done: false }));
+}
+function runEvents() {
+  for (const e of Game.events) if (!e.done && Game.clock >= e.at) { e.done = true; e.run(); }
+}
+function windShift() {
+  Game.windFrom = (Game.windFrom + pick([1, 2, -1, -2, 3]) + 8) % 8;
+  Game.windStr = clamp(Game.windStr + rnd() * 0.5 - 0.15, 0.75, 1.5);
+  msg(`Radio: El viento cambió. Ahora sopla del ${DIR_NAMES[Game.windFrom]} (${Game.windLabel()}).`, 'radio');
+  Sound.sfx('radio');
+}
+function ramonEvent() {
+  if (Game.ramonConvinced) { msg('Don Ramón cumplió su palabra: hoy no hubo quema en su chaco.', 'good'); Game.addTrust(3); Sound.sfx('trust'); return; }
+  Game.ramonFired = true;
+  startFire(LM.chaco, 'Radio: ¡La quema de rastrojo de Don Ramón se salió de control!');
+}
+// --- Tala ilegal ---
+function cutTree(s) {
+  let best = null, bd = 1e9;
+  for (let y = s.y - 4; y <= s.y + 4; y++) for (let x = s.x - 4; x <= s.x + 4; x++) {
+    if (!inMap(x, y) || tileAt(x, y) !== TL.TREE || World.burn[idx(x, y)] > 0) continue;
+    const d = dist(x, y, s.x, s.y) + rnd() * 1.5;
+    if (d < bd) { bd = d; best = { x, y }; }
+  }
+  if (best) { setTile(best.x, best.y, TL.STUMP); s.stumps.push(best); }
+  return best;
+}
+function startLogging(n) {
+  const s = Game.sites[n]; if (!s) return;
+  s.active = true;
+  for (let k = 0; k < 3; k++) cutTree(s);
+  Game.loggers.push({ x: s.x + 0.5, y: s.y + 0.9, dir: 0, frame: 0, animT: 0, state: 'cutting', cutT: 3, sawT: 0.3, heardT: 0, site: s, life: 70 });
+  if (Game.trust >= CFG.TIP_TRUST) {
+    s.known = true;
+    msg(`Un vecino avisa por radio: hay motosierras en ${s.name}. (Lo marqué en el mapa)`, 'radio'); Sound.sfx('radio');
+  }
+}
+function updateLoggers(dt) {
+  for (const L of Game.loggers) {
+    if (L.state === 'gone') continue;
+    const d = dist(L.x, L.y, Player.x, Player.y);
+    if (L.state === 'cutting') {
+      L.life -= dt; L.cutT -= dt; L.sawT -= dt; L.heardT -= dt;
+      if (L.sawT <= 0) {
+        L.sawT = 2.8;
+        if (d < 24) Sound.chainsaw(clamp(1 - d / 24, 0, 1));
+        if (d < 22 && L.heardT <= 0) {
+          L.heardT = 18;
+          msg(`Se escucha una motosierra hacia el ${DIR_NAMES[dirIndex(L.x - Player.x, L.y - Player.y)]}.`, 'warn');
+        }
+      }
+      if (L.cutT <= 0) {
+        L.cutT = 6;
+        const t = cutTree(L.site);
+        if (t) { L.x = t.x + 0.5 + (t.x < L.site.x ? 0.9 : -0.9); L.y = t.y + 0.9; L.dir = t.x < L.site.x ? 1 : 2; if (d < 14) Sound.sfx('chop'); }
+      }
+      animate(L, dt, false);
+      if (d < 5.5) {
+        L.state = 'fleeing'; L.site.discovered = true; L.site.known = true;
+        msg('¡Sorprendiste a los taladores y huyeron! Documenta el claro: herramienta 1 y mantén E.', 'alert'); Sound.sfx('alert');
+      } else if (L.life <= 0) L.state = 'fleeing';
+    } else if (L.state === 'fleeing') {
+      let ax = L.x - Player.x, ay = L.y - Player.y; const al = Math.hypot(ax, ay) || 1;
+      ax /= al; ay /= al;
+      L.x = clamp(L.x + ax * 5.5 * dt, 0.5, World.w - 0.5); L.y = clamp(L.y + ay * 5.5 * dt, 0.5, World.h - 0.5);
+      L.dir = Math.abs(ax) > Math.abs(ay) ? (ax < 0 ? 1 : 2) : (ay < 0 ? 3 : 0);
+      animate(L, dt, true);
+      if (d > 18 || L.x <= 0.6 || L.y <= 0.6 || L.x >= World.w - 0.6 || L.y >= World.h - 0.6) L.state = 'gone';
+    }
+  }
+  // Encontrar un claro talado cuando los taladores ya se fueron
+  for (const s of Game.sites) {
+    if (!s.active || s.discovered || !s.stumps.length) continue;
+    if (s.stumps.some(t => dist(Player.x, Player.y, t.x + 0.5, t.y + 0.5) < 5)) {
+      s.discovered = true; s.known = true;
+      msg(`Encontraste un claro recién talado en ${s.name}. Documéntalo con la cámara (1).`, 'warn'); Sound.sfx('alert');
+    }
+  }
+}
+
+/* ===================== 10. INTERACCIÓN Y HERRAMIENTAS ===================== */
+const FACE = [[0, 1], [-1, 0], [1, 0], [0, -1]];
+function nearestNPC(range) {
+  let best = null, bd = range;
+  for (const n of NPCS) { const d = dist(n.x, n.y, Player.x, Player.y); if (d < bd) { bd = d; best = n; } }
+  return best;
+}
+const nearDoor = () => dist(Player.x, Player.y, LM.door.x, LM.door.y + 0.3) < 1.5;
+const nearTank = () => dist(Player.x, Player.y, 29.5, 28.5) < 1.4;
+function nearWater() {
+  const fx = Math.floor(Player.x), fy = Math.floor(Player.y - 0.2);
+  for (const [dx, dy] of [[0, 0], ...FACE]) if (tileAt(fx + dx, fy + dy) === TL.WATER) return true;
+  return false;
+}
+function siteToDocument() {
+  for (const s of Game.sites) {
+    if (!s.discovered || s.documented) continue;
+    if (s.stumps.some(t => dist(Player.x, Player.y, t.x + 0.5, t.y + 0.5) < 2.6)) return s;
+  }
+  return null;
+}
+const RAKE_TIME = { grass: 0.35, bush: 0.55, stump: 0.6, tree: 1.3 };
+function contextPrompt() {
+  const n = nearestNPC(1.6);
+  if (n) return { kind: 'talk', npc: n, text: `E: Hablar con ${n.name}` };
+  if (nearDoor()) {
+    const pend = Game.sites.filter(s => s.documented && !s.reported).length;
+    return { kind: 'post', text: pend ? `E: Presentar ${pend === 1 ? 'la denuncia' : pend + ' denuncias'} y recargar agua` : 'E: Recargar agua en Ñembi Misi' };
+  }
+  if (nearTank()) return { kind: 'refill', text: 'E: Llenar la mochila en el tanque' };
+  if (nearWater()) return { kind: 'refill', text: 'E: Llenar la mochila en la laguna' };
+  if (Player.tool === 1) { const s = siteToDocument(); if (s) return { kind: 'doc', site: s, text: 'Mantén E: fotografiar y registrar la tala' }; }
+  if (Player.tool === 2 && Fire.nearestBurning(Player.x, Player.y, 3.2))
+    return { kind: 'spray', text: Player.water > 0 ? `E: Rociar agua (quedan ${Player.water})` : 'Sin agua: recarga en la laguna o en Ñembi Misi' };
+  if (Player.tool === 3) {
+    const f = Player.facingTile(), t = tileAt(f.x, f.y);
+    if (fuelOf(t) && World.burn[idx(f.x, f.y)] === 0) return { kind: 'rake', text: t === TL.TREE ? 'Mantén E: talar y limpiar (cortafuego)' : 'Mantén E: limpiar vegetación (cortafuego)' };
+  }
+  return null;
+}
+function refill() {
+  if (Player.water >= CFG.WATER_MAX) { msg('La mochila de agua ya está llena.'); Sound.sfx('blip'); return; }
+  Player.water = CFG.WATER_MAX; msg('Mochila de agua llena (10 cargas).', 'good'); Sound.sfx('refill');
+}
+function useDoor() {
+  const pend = Game.sites.filter(s => s.documented && !s.reported);
+  for (const s of pend) {
+    s.reported = true; Game.reports++; Game.addTrust(5);
+    msg(`Denuncia presentada: tala ilegal en ${s.name} (${s.docStumps} árboles). La autoridad forestal enviará inspectores.`, 'good');
+  }
+  if (pend.length) Sound.sfx('success');
+  if (Player.water < CFG.WATER_MAX) refill();
+  else if (!pend.length) { msg('Todo en orden en Ñembi Misi. La radio está encendida.'); Sound.sfx('blip'); }
+}
+function spray() {
+  if (Player.sprayCD > 0) return;
+  if (Player.water <= 0) { msg('La mochila está vacía. Recarga en la laguna o en Ñembi Misi.', 'warn'); Sound.sfx('fail'); Player.sprayCD = 0.6; return; }
+  Player.water--; Player.sprayCD = 0.35; Game.waterUsed++;
+  Sound.sfx('spray');
+  const v = FACE[Player.dir], p = [v[1], v[0]];
+  const bx = Math.floor(Player.x), by = Math.floor(Player.y - 0.2);
+  const targets = [[bx + v[0], by + v[1]], [bx + 2 * v[0], by + 2 * v[1]], [bx + v[0] + p[0], by + v[1] + p[1]], [bx + v[0] - p[0], by + v[1] - p[1]], [bx + 3 * v[0], by + 3 * v[1]]];
+  let hits = 0;
+  for (const [x, y] of targets) if (douse(x, y)) hits++;
+  for (let k = 0; k < 14; k++) {
+    const sp = 40 + rnd() * 40;
+    Particles.add({ kind: 'drop', x: Player.x * T + v[0] * 6, y: Player.y * T - 8 + v[1] * 4, vx: v[0] * sp + (rnd() - 0.5) * 25, vy: v[1] * sp - 25 + (rnd() - 0.5) * 20, size: 1, life: 0.55, max: 0.55, col: rnd() < 0.5 ? '#9fd4f2' : '#e8f6ff' });
+  }
+  if (hits) Sound.sfx('hiss');
+}
+function startTalk(n) {
+  const ax = Player.x - n.x, ay = Player.y - n.y;
+  n.dir = Math.abs(ax) > Math.abs(ay) ? (ax < 0 ? 1 : 2) : (ay < 0 ? 3 : 0);
+  let lines = n.talked ? n.again : n.lines, onEnd = null;
+  if (n.id === 'ramon' && !n.talked && Game.ramonFired) {
+    lines = [['Don Ramón', '¡Perdón, guardaparque! Prendí el rastrojo y el viento se llevó las chispas al monte.'],
+             [R, 'Lo importante ahora es apagarlo. Para la próxima: permiso, cortafuego y nunca con viento.'],
+             ['Don Ramón', 'Le prometo que no vuelve a pasar. Voy a avisar a los vecinos.']];
+    onEnd = () => { n.talked = true; Game.addTrust(4); msg('Confianza de la comunidad +4 %', 'good'); Sound.sfx('trust'); };
+  } else if (!n.talked) {
+    onEnd = () => {
+      n.talked = true; Game.addTrust(n.trust);
+      msg(`Confianza de la comunidad +${n.trust} %`, 'good'); Sound.sfx('trust');
+      if (n.id === 'ramon') Game.ramonConvinced = true;
+    };
+  }
+  openDialog(lines, onEnd);
+}
+function openDialog(lines, onEnd) { Game.dialog = { lines, i: 0, shown: 0, onEnd, blipT: 0 }; Sound.sfx('blip'); }
+function updateDialog(dt) {
+  const d = Game.dialog, full = d.lines[d.i][1].length;
+  if (d.shown < full) { d.shown = Math.min(full, d.shown + dt * 55); d.blipT -= dt; if (d.blipT <= 0) { d.blipT = 0.07; Sound.sfx('talk'); } }
+  if (Input.hit('e', 'enter', ' ')) {
+    if (d.shown < full) d.shown = full;
+    else if (d.i < d.lines.length - 1) { d.i++; d.shown = 0; Sound.sfx('blip'); }
+    else { Game.dialog = null; if (d.onEnd) d.onEnd(); }
+  }
+}
+// Acción continua (mantener E): documentar o abrir cortafuego
+function updateTools(dt) {
+  Player.sprayCD = Math.max(0, Player.sprayCD - dt);
+  const cp = Game.prompt = contextPrompt();
+  if (Input.hit('e')) {
+    if (cp && cp.kind === 'talk') { Player.action = null; startTalk(cp.npc); return; }
+    if (cp && cp.kind === 'post') { useDoor(); return; }
+    if (cp && cp.kind === 'refill') { refill(); return; }
+    if (Player.tool === 2) { spray(); return; }
+    if (Player.tool === 1 && !(cp && cp.kind === 'doc')) { msg('Aquí no hay nada que documentar. Busca tocones recientes.'); Sound.sfx('fail'); }
+  }
+  const held = Input.isDown('e');
+  if (!held) { Player.action = null; return; }
+  if (Player.tool === 1 && cp && cp.kind === 'doc') {
+    if (!Player.action || Player.action.kind !== 'doc' || Player.action.site !== cp.site) Player.action = { kind: 'doc', site: cp.site, t: 0, need: CFG.DOC_TIME };
+    Player.action.t += dt;
+    if (Player.action.t >= Player.action.need) {
+      const s = cp.site; s.documented = true; s.docStumps = s.stumps.length; Player.action = null;
+      Particles.add({ kind: 'flash', x: Player.x * T, y: Player.y * T - 10, vx: 0, vy: 0, life: 0.25, max: 0.25 });
+      Sound.sfx('shutter'); setTimeout(() => Sound.sfx('success'), 180);
+      msg(`Tala documentada en ${s.name}: ${s.docStumps} árboles cortados. Lleva la denuncia a Ñembi Misi.`, 'good');
+    }
+  } else if (Player.tool === 3 && cp && cp.kind === 'rake') {
+    const f = Player.facingTile(), t = tileAt(f.x, f.y);
+    const a = Player.action;
+    if (!a || a.kind !== 'rake' || a.x !== f.x || a.y !== f.y) Player.action = { kind: 'rake', x: f.x, y: f.y, t: 0, need: RAKE_TIME[fuelOf(t)], tickT: 0 };
+    const b = Player.action; b.t += dt; b.tickT -= dt;
+    if (b.tickT <= 0) { b.tickT = 0.22; Sound.sfx(t === TL.TREE ? 'chop' : 'rake'); }
+    if (b.t >= b.need) {
+      setTile(f.x, f.y, TL.BREAK); World.wet[idx(f.x, f.y)] = 0; Game.breaks++;
+      if (t === TL.TREE) Game.treesCutForBreak++;
+      const nb = Fire.nearestBurning(f.x + 0.5, f.y + 0.5, 7); // un cortafuego cerca de un incendio cuenta como combate
+      if (nb) { const inc = Game.incidents[World.fireId[idx(nb.x, nb.y)] - 1]; if (inc) inc.helped = true; }
+      for (let k = 0; k < 5; k++) Particles.add({ kind: 'spark', x: f.x * T + 8, y: f.y * T + 10, vx: (rnd() - 0.5) * 30, vy: -15 - rnd() * 15, size: 1, life: 0.4, max: 0.4, col: '#8a6440' });
+      Player.action = null;
+    }
+  } else Player.action = null;
+}
+
+/* ===================== 11. RENDER DEL MUNDO Y HUD ===================== */
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const muteBtn = document.getElementById('muteBtn');
+const cam = { x: 0, y: 0 };
+const FONT = '"Lucida Console","Courier New",monospace';
+function updateCamera() {
+  cam.x = clamp(Player.x * T - VIEW_W / 2, 0, World.w * T - VIEW_W);
+  cam.y = clamp(Player.y * T - 8 - VIEW_H / 2, 0, World.h * T - VIEW_H);
+}
+function groundSprite(i, t, x, y) {
+  const v = World.variant[i];
+  switch (t) {
+    case TL.PATH: return SPR.path[v % 2];
+    case TL.BURNT: return SPR.burnt[v % 2];
+    case TL.BREAK: return SPR.soil;
+    case TL.WATER: return SPR.water[(Math.floor(Game.time * 1.5) + x + y) % 2];
+    case TL.FLOOR: return SPR.floor;
+    case TL.VILLAGE: return SPR.village[v % 2];
+    case TL.BUILDING: case TL.FENCE: return inVillage(x, y) ? SPR.village[0] : SPR.floor;
+    default: return SPR.grass[v % 4];
+  }
+}
+function renderWorld(g) {
+  g.save(); g.scale(S, S);
+  const cx = Math.round(cam.x), cy = Math.round(cam.y);
+  g.translate(-cx, -cy);
+  const x0 = Math.max(0, Math.floor(cx / T) - 1), x1 = Math.min(World.w - 1, Math.ceil((cx + VIEW_W) / T) + 1);
+  const y0 = Math.max(0, Math.floor(cy / T) - 1), y1 = Math.min(World.h - 1, Math.ceil((cy + VIEW_H) / T) + 2);
+  // Capa 1: suelo
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const i = idx(x, y), t = World.tiles[i];
+    g.drawImage(groundSprite(i, t, x, y), x * T, y * T);
+    if (World.wet[i] > 0 && t !== TL.WATER) { g.fillStyle = `rgba(40,90,150,${0.28 * Math.min(1, World.wet[i] / 6)})`; g.fillRect(x * T, y * T, T, T); }
+  }
+  // Casilla objetivo de la herramienta
+  if (Game.state === 'play' && (Player.tool === 3 || Player.tool === 2)) {
+    const f = Player.facingTile();
+    g.strokeStyle = Player.tool === 3 ? 'rgba(255,230,150,0.8)' : 'rgba(150,210,255,0.8)'; g.lineWidth = 1;
+    g.strokeRect(f.x * T + 0.5, f.y * T + 0.5, T - 1, T - 1);
+  }
+  // Capa 2: objetos ordenados por profundidad (vista 3/4)
+  const objs = [];
+  const ppx = Player.x * T, ppy = Player.y * T;
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const i = idx(x, y), t = World.tiles[i], burning = World.burn[i] > 0;
+    const prog = burning ? 1 - World.burn[i] / World.burnMax[i] : 0;
+    const base = (y + 1) * T;
+    if (t === TL.TREE) {
+      objs.push({ y: base, d: () => {
+        const behind = ppy < base && ppy > base - 30 && Math.abs(ppx - (x * T + 8)) < 12;
+        if (behind) g.globalAlpha = 0.45;
+        g.drawImage(burning && prog > 0.55 ? SPR.snag : SPR.tree[World.variant[i]], x * T, base - 28);
+        g.globalAlpha = 1;
+        if (burning) { drawFlames(g, x * T, y * T - 10, Game.time, i, Math.sin(prog * Math.PI)); drawFlames(g, x * T, y * T + 1, Game.time, i + 3, 0.6); }
+      } });
+    } else if (t === TL.BURNT && World.orig[i] === TL.TREE && World.variant[i] % 3 !== 0) {
+      objs.push({ y: base, d: () => g.drawImage(SPR.snag, x * T, base - 28) });
+    } else if (t === TL.BUSH || t === TL.ROCK || t === TL.STUMP || t === TL.FENCE) {
+      const spr = t === TL.BUSH ? SPR.bush : t === TL.ROCK ? SPR.rock : t === TL.STUMP ? SPR.stump : (World.variant[i] === 1 ? SPR.fenceV : SPR.fence);
+      objs.push({ y: base - 1, d: () => { g.drawImage(spr, x * T, y * T); if (burning) drawFlames(g, x * T, y * T, Game.time, i, Math.sin(prog * Math.PI)); } });
+    } else if (burning) {
+      objs.push({ y: base - 1, d: () => drawFlames(g, x * T, y * T + 1, Game.time, i, Math.sin(prog * Math.PI) * 0.8) });
+    }
+  }
+  for (const b of World.buildings) {
+    if ((b.x + b.w) < x0 - 1 || b.x > x1 + 1 || (b.y + b.h) < y0 - 1 || b.y > y1 + 3) continue;
+    objs.push({ y: (b.y + b.h) * T, d: () => g.drawImage(b.spr, b.x * T, (b.y + b.h) * T - b.spr.height) });
+  }
+  for (const n of NPCS) objs.push({ y: n.y * T, d: () => drawPerson(g, n.x * T, n.y * T, n.dir, n.frame, LOOKS[n.look]) });
+  for (const L of Game.loggers) if (L.state !== 'gone') objs.push({ y: L.y * T, d: () => drawPerson(g, L.x * T, L.y * T, L.dir, L.state === 'cutting' ? Math.floor(Game.time * 8) % 2 : L.frame, LOOKS.logger) });
+  if (Game.state !== 'title' && Game.state !== 'controls') objs.push({ y: ppy, d: () => drawPerson(g, ppx, ppy, Player.dir, Player.frame, LOOKS.ranger) });
+  objs.sort((a, b) => a.y - b.y);
+  for (const o of objs) o.d();
+  Particles.draw(g);
+  // Letrero del campamento base Ñembi Misi (el primer edificio)
+  const camp = World.buildings[0];
+  if (camp) { g.font = `bold 4px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#e7d7a8'; g.fillText('ÑEMBI MISI', camp.x * T + 32, (camp.y + camp.h) * T - 64 + 29.6); }
+  // Globo "!" sobre vecinos con los que aún no hablaste
+  if (Game.state === 'play') for (const n of NPCS) if (!n.talked) {
+    const bob = Math.round(Math.sin(Game.time * 4) * 1.5);
+    px(g, Math.round(n.x * T) - 3, Math.round(n.y * T) - 30 + bob, '#fff4c2', 6, 8); px(g, Math.round(n.x * T) - 1, Math.round(n.y * T) - 29 + bob, '#b4462a', 2, 4); px(g, Math.round(n.x * T) - 1, Math.round(n.y * T) - 24 + bob, '#b4462a', 2, 1);
+  }
+  g.restore();
+}
+function drawTint(g) {
+  const h = Game.clock / 60;
+  let dark = 0;
+  if (h < 7) { g.fillStyle = `rgba(255,140,60,${0.24 * (7 - h)})`; g.fillRect(0, 0, CFG.W, CFG.H); }
+  else if (h > 16.5) { const a = Math.min(1, (h - 16.5) / 2); g.fillStyle = `rgba(255,110,40,${0.2 * a})`; g.fillRect(0, 0, CFG.W, CFG.H); }
+  if (h > 18.2) { dark = Math.min(1, (h - 18.2) / 1.6); g.fillStyle = `rgba(18,24,70,${0.5 * dark})`; g.fillRect(0, 0, CFG.W, CFG.H); }
+  if (dark > 0.05) { // resplandor del fuego en la oscuridad
+    g.save(); g.globalCompositeOperation = 'lighter';
+    let n = 0;
+    for (let i = 0; i < World.tiles.length && n < 80; i++) if (World.burn[i] > 0) {
+      const sx = ((i % World.w) * T + 8 - cam.x) * S, sy = (Math.floor(i / World.w) * T + 4 - cam.y) * S;
+      if (sx < -60 || sy < -60 || sx > CFG.W + 60 || sy > CFG.H + 60) continue;
+      const gr = g.createRadialGradient(sx, sy, 0, sx, sy, 60);
+      gr.addColorStop(0, `rgba(255,120,30,${0.35 * dark})`); gr.addColorStop(1, 'rgba(255,120,30,0)');
+      g.fillStyle = gr; g.fillRect(sx - 60, sy - 60, 120, 120); n++;
+    }
+    g.restore();
+  }
+}
+// --- utilidades de dibujo de interfaz ---
+function panel(g, x, y, w, h, alpha = 0.88) {
+  g.fillStyle = `rgba(20,30,23,${alpha})`; g.fillRect(x, y, w, h);
+  g.strokeStyle = '#6b8a5a'; g.lineWidth = 2; g.strokeRect(x + 1, y + 1, w - 2, h - 2);
+  g.strokeStyle = 'rgba(0,0,0,0.6)'; g.strokeRect(x + 4, y + 4, w - 8, h - 8);
+}
+function txt(g, s, x, y, size = 16, col = '#f1e7c9', align = 'left', weight = 'bold') {
+  g.font = `${weight} ${size}px ${FONT}`; g.textAlign = align; g.textBaseline = 'top';
+  g.fillStyle = 'rgba(0,0,0,0.65)'; g.fillText(s, x + 2, y + 2);
+  g.fillStyle = col; g.fillText(s, x, y);
+}
+function wrap(g, s, maxW, size = 16) {
+  g.font = `bold ${size}px ${FONT}`;
+  const words = s.split(' '), lines = []; let cur = '';
+  for (const w of words) { const test = cur ? cur + ' ' + w : w; if (g.measureText(test).width > maxW && cur) { lines.push(cur); cur = w; } else cur = test; }
+  if (cur) lines.push(cur);
+  return lines;
+}
+function meter(g, x, y, w, h, frac, col) {
+  g.fillStyle = '#0c120e'; g.fillRect(x, y, w, h);
+  g.fillStyle = col; g.fillRect(x + 2, y + 2, Math.max(0, (w - 4) * clamp(frac, 0, 1)), h - 4);
+}
+function phaseName(min) { const h = min / 60; return h < 9 ? 'Mañana' : h < 13 ? 'Media mañana' : h < 16 ? 'Tarde' : h < 18.5 ? 'Atardecer' : 'Anochecer'; }
+const forestPct = () => Math.round(countTrees() / World.initialTrees * 100);
+const MSG_COL = { info: '#f1e7c9', good: '#a8e07a', warn: '#f2c35a', alert: '#ff8a6a', radio: '#9fd0f0' };
+const MINI_COL = { [TL.GRASS]: '#b5a65c', [TL.TREE]: '#4d6b2a', [TL.PATH]: '#d6b47e', [TL.STUMP]: '#d49a52', [TL.BURNT]: '#26211e', [TL.BREAK]: '#8a6440',
+  [TL.WATER]: '#3d78a8', [TL.FLOOR]: '#a98b66', [TL.BUILDING]: '#9a3a2a', [TL.VILLAGE]: '#c4ab88', [TL.FENCE]: '#6a4a2a', [TL.ROCK]: '#8e8b81', [TL.BUSH]: '#8c9644' };
+
+function objectives() {
+  const list = [];
+  for (const inc of Game.incidents) if (!inc.done) list.push({ c: '#ff8a6a', s: `Incendio activo: ${inc.name} (${inc.active} ha)` });
+  for (const s of Game.sites) {
+    if (s.known && !s.documented) list.push({ c: '#d8a6ff', s: `Tala ilegal: ${s.name}, documentar` });
+    if (s.documented && !s.reported) list.push({ c: '#f2c35a', s: `Denuncia pendiente: ${s.name} (ir a Ñembi Misi)` });
+  }
+  const ram = NPCS.find(n => n.id === 'ramon');
+  if (ram && !ram.talked && !Game.ramonFired) list.push({ c: '#9fd0f0', s: 'Hablar con Don Ramón antes de su quema (13:15)' });
+  const talked = NPCS.filter(n => n.talked).length;
+  if (talked < NPCS.length) list.push({ c: '#c9d6b0', s: `Conversar con vecinos del pueblo (${talked}/${NPCS.length})` });
+  if (Player.water <= 2) list.push({ c: '#9fd0f0', s: 'Recargar agua (laguna o Ñembi Misi)' });
+  return list.slice(0, 6);
+}
+function fireCentroids() {
+  const acc = {};
+  for (let i = 0; i < World.tiles.length; i++) if (World.burn[i] > 0) {
+    const id = World.fireId[i]; const a = acc[id] || (acc[id] = { x: 0, y: 0, n: 0 });
+    a.x += i % World.w + 0.5; a.y += Math.floor(i / World.w) + 0.5; a.n++;
+  }
+  return Object.entries(acc).map(([id, a]) => ({ x: a.x / a.n, y: a.y / a.n, name: Game.incidents[id - 1].name }));
+}
+function drawEdgeMarkers(g) {
+  const targets = fireCentroids().map(f => ({ ...f, col: '#ff6a3a', label: 'Fuego' }));
+  for (const s of Game.sites) if (s.known && !s.documented) targets.push({ x: s.x + 0.5, y: s.y + 0.5, col: '#c88aff', label: 'Tala' });
+  if (Game.sites.some(s => s.documented && !s.reported)) targets.push({ x: LM.door.x, y: LM.door.y, col: '#f2c35a', label: 'Ñembi Misi' });
+  for (const t of targets) {
+    const sx = (t.x * T - cam.x) * S, sy = (t.y * T - cam.y) * S;
+    if (sx > 0 && sy > 0 && sx < CFG.W && sy < CFG.H) continue;
+    const cxs = CFG.W / 2, cys = CFG.H / 2, ang = Math.atan2(sy - cys, sx - cxs);
+    const ex = clamp(sx, 40, CFG.W - 40), ey = clamp(sy, 120, CFG.H - 150);
+    g.save(); g.translate(ex, ey); g.rotate(ang);
+    g.fillStyle = t.col; g.beginPath(); g.moveTo(16, 0); g.lineTo(-6, -10); g.lineTo(-6, 10); g.closePath(); g.fill();
+    g.strokeStyle = '#000'; g.lineWidth = 2; g.stroke(); g.restore();
+    const km = (dist(Player.x, Player.y, t.x, t.y) * 0.1).toFixed(1); // 1 casilla ≈ 1 ha ≈ 100 m
+    txt(g, `${t.label} ${km} km`, ex - Math.cos(ang) * 40, ey - Math.sin(ang) * 26 - 7, 12, t.col, 'center');
+  }
+}
+function drawToolIcon(g, id, x, y) {
+  g.save(); g.translate(x, y); g.scale(3, 3);
+  if (id === 1) { px(g, 1, 3, '#2a2a2a', 12, 8); px(g, 4, 1, '#2a2a2a', 4, 2); disc(g, 7, 7, 3, '#5a6a7a'); disc(g, 7, 7, 1, '#bfe0ff'); px(g, 11, 4, '#e0e0e0', 1, 1); }
+  else if (id === 2) { px(g, 3, 2, '#3e6f93', 8, 10); px(g, 3, 2, '#5d92b8', 8, 2); px(g, 5, 0, '#2a3d4a', 4, 2); px(g, 11, 5, '#2a2a2a', 2, 5); px(g, 12, 9, '#9fd4f2', 2, 2); }
+  else { px(g, 6, 0, '#8b5e34', 2, 10); px(g, 2, 10, '#9a9a9a', 10, 2); px(g, 2, 12, '#9a9a9a', 1, 2); px(g, 5, 12, '#9a9a9a', 1, 2); px(g, 8, 12, '#9a9a9a', 1, 2); px(g, 11, 12, '#9a9a9a', 1, 2); }
+  g.restore();
+}
+function drawHUD(g) {
+  // Reloj, fase del día y viento
+  panel(g, 10, 10, 290, 92);
+  txt(g, fmtClock(Game.clock), 24, 20, 30, '#ffe6a0');
+  txt(g, phaseName(Game.clock), 24, 56, 13, '#c9d6b0');
+  meter(g, 24, 76, 140, 12, (Game.clock - CFG.DAY_START) / (CFG.DAY_END - CFG.DAY_START), '#e9a43b');
+  const wx = 252, wy = 52, wv = Game.windVec();
+  g.strokeStyle = '#6b8a5a'; g.lineWidth = 2; g.beginPath(); g.arc(wx, wy, 24, 0, Math.PI * 2); g.stroke();
+  txt(g, 'N', wx, wy - 37, 10, '#c9d6b0', 'center');
+  const wl = Math.hypot(wv.x, wv.y) || 1, ux = wv.x / wl, uy = wv.y / wl;
+  g.strokeStyle = '#9fd0f0'; g.lineWidth = 4; g.beginPath(); g.moveTo(wx - ux * 18, wy - uy * 18); g.lineTo(wx + ux * 16, wy + uy * 16); g.stroke();
+  g.fillStyle = '#9fd0f0'; g.beginPath(); g.moveTo(wx + ux * 22, wy + uy * 22); g.lineTo(wx + ux * 10 - uy * 8, wy + uy * 10 + ux * 8); g.lineTo(wx + ux * 10 + uy * 8, wy + uy * 10 - ux * 8); g.closePath(); g.fill();
+  txt(g, `Viento ${DIR_SHORT[Game.windFrom]}`, 212, 26, 12, '#9fd0f0', 'right');
+  txt(g, Game.windLabel(), 212, 56, 11, '#9fd0f0', 'right');
+  // Indicadores
+  panel(g, CFG.W - 252, 10, 242, 78);
+  const fp = forestPct();
+  txt(g, 'BOSQUE', CFG.W - 236, 22, 12, '#c9d6b0'); txt(g, fp + ' %', CFG.W - 26, 20, 15, '#a8e07a', 'right');
+  meter(g, CFG.W - 236, 38, 210, 10, fp / 100, fp > 85 ? '#6fae3a' : fp > 65 ? '#c9b23a' : '#c84a2a');
+  txt(g, 'CONFIANZA', CFG.W - 236, 54, 12, '#c9d6b0'); txt(g, Math.round(Game.trust) + ' %', CFG.W - 26, 52, 15, '#f2c35a', 'right');
+  meter(g, CFG.W - 236, 70, 210, 10, Game.trust / 100, '#e9a43b');
+  // Pendientes
+  const obs = objectives();
+  if (obs.length) {
+    panel(g, 10, 108, 330, 30 + obs.length * 19, 0.78);
+    txt(g, 'PENDIENTES', 22, 117, 11, '#e9a43b');
+    obs.forEach((o, k) => txt(g, '· ' + o.s, 22, 134 + k * 19, 12, o.c, 'left', 'normal'));
+  }
+  // Barra de herramientas
+  const bx = CFG.W / 2 - 117, by = CFG.H - 66;
+  TOOLS.forEach((tl, k) => {
+    const x = bx + k * 80, sel = Player.tool === tl.id;
+    g.fillStyle = sel ? 'rgba(80,70,30,0.92)' : 'rgba(20,30,23,0.85)'; g.fillRect(x, by, 74, 56);
+    g.strokeStyle = sel ? '#ffd36a' : '#6b8a5a'; g.lineWidth = sel ? 3 : 2; g.strokeRect(x + 1, by + 1, 72, 54);
+    drawToolIcon(g, tl.id, x + 16, by + 4);
+    txt(g, String(tl.id), x + 6, by + 4, 11, '#ffe6a0');
+    txt(g, tl.name, x + 37, by + 42, 10, sel ? '#ffe6a0' : '#c9d6b0', 'center');
+    if (tl.id === 2) meter(g, x + 60, by + 6, 8, 34, 0, '#000'), (g.fillStyle = '#5db0e8', g.fillRect(x + 62, by + 8 + 30 * (1 - Player.water / CFG.WATER_MAX), 4, 30 * Player.water / CFG.WATER_MAX));
+  });
+  txt(g, `Agua ${Player.water}/${CFG.WATER_MAX}`, bx + 117, by - 18, 12, '#9fd0f0', 'center');
+  // Indicación contextual
+  const hint = Game.prompt ? Game.prompt.text : TOOLS[Player.tool - 1].hint;
+  g.font = `bold 14px ${FONT}`; const hw = g.measureText(hint).width + 28;
+  g.fillStyle = 'rgba(10,16,12,0.8)'; g.fillRect(CFG.W / 2 - hw / 2, by - 48, hw, 24);
+  txt(g, hint, CFG.W / 2, by - 44, 14, Game.prompt ? '#ffe6a0' : '#aab59c', 'center');
+  // Mensajes de radio y avisos
+  let my = CFG.H - 14;
+  for (let k = Game.messages.length - 1; k >= 0; k--) {
+    const m = Game.messages[k], fs = Touch.on ? 14 : 12, lines = wrap(g, m.text, 318, fs), h = lines.length * (fs + 3) + 8;
+    my -= h + 4;
+    if (my < 290) break;
+    g.globalAlpha = clamp((9 - m.t) / 1.5, 0, 1);
+    g.fillStyle = 'rgba(10,16,12,0.8)'; g.fillRect(10, my, 336, h);
+    g.fillStyle = MSG_COL[m.kind] || '#fff'; g.fillRect(10, my, 3, h);
+    lines.forEach((l, j) => txt(g, l, 18, my + 4 + j * (fs + 3), fs, MSG_COL[m.kind], 'left', 'normal'));
+    g.globalAlpha = 1;
+  }
+  // Barra de progreso de la acción
+  if (Player.action) {
+    const sx = (Player.x * T - cam.x) * S, sy = (Player.y * T - cam.y - 26) * S;
+    meter(g, sx - 30, sy - 10, 60, 10, Player.action.t / Player.action.need, Player.action.kind === 'doc' ? '#c88aff' : '#e9a43b');
+  }
+  drawEdgeMarkers(g);
+  drawMinimap(g, CFG.W - 124, CFG.H - 92);
+  if (Sound.muted) txt(g, 'SILENCIO (M)', CFG.W - 20, 96, 11, '#ff8a6a', 'right');
+}
+function drawMinimap(g, x, y) {
+  const s = 2;
+  g.fillStyle = '#0c120e'; g.fillRect(x - 4, y - 4, World.w * s + 8, World.h * s + 8);
+  for (let ty = 0; ty < World.h; ty++) for (let tx = 0; tx < World.w; tx++) {
+    const i = idx(tx, ty);
+    g.fillStyle = World.burn[i] > 0 ? ((Math.floor(Game.time * 4) + tx) % 2 ? '#ff4a1a' : '#ffc23a') : MINI_COL[World.tiles[i]];
+    g.fillRect(x + tx * s, y + ty * s, s, s);
+  }
+  for (const st of Game.sites) if (st.known && !st.documented) { g.strokeStyle = '#d8a6ff'; g.lineWidth = 2; g.strokeRect(x + st.x * s - 5, y + st.y * s - 5, 10, 10); }
+  g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 1; g.strokeRect(x + cam.x / T * s, y + cam.y / T * s, VIEW_W / T * s, VIEW_H / T * s);
+  if (Math.floor(Game.time * 3) % 2) { g.fillStyle = '#fff'; g.fillRect(x + Player.x * s - 2, y + Player.y * s - 2, 4, 4); }
+  g.strokeStyle = '#6b8a5a'; g.lineWidth = 2; g.strokeRect(x - 4, y - 4, World.w * s + 8, World.h * s + 8);
+}
+
+/* ===================== 12. PANTALLAS ===================== */
+const FACTS = [
+  'Según la FAO, entre 2015 y 2020 se perdieron cerca de 10 millones de hectáreas de bosque por año en el mundo por deforestación.',
+  'La gran mayoría de los incendios forestales los provocan las personas, muchas veces con quemas agrícolas que se salen de control.',
+  'Un cortafuego es una franja sin vegetación. Al quitarle combustible al fuego, frena su avance.',
+  'El fuego necesita calor, combustible y oxígeno: el triángulo del fuego. Si quitas uno de los tres, se apaga.',
+  'Según la ONU, los bosques albergan cerca del 80 % de las especies terrestres de animales, plantas e insectos.',
+  'El bosque seco Chiquitano, entre Bolivia, Brasil y Paraguay, es uno de los bosques secos tropicales más extensos del mundo.',
+  'Cuando las comunidades vigilan su bosque y avisan a tiempo, los incendios y las talas ilegales se detectan mucho antes.',
+];
+const SPEAKER_LOOK = { 'Doña Rosa': 'rosa', 'Don Ramón': 'ramon', 'Lucía': 'lucia', [R]: 'ranger' };
+function bigPerson(g, x, y, look, scale = 5) { g.save(); g.translate(x, y); g.scale(scale, scale); drawPerson(g, 0, 0, 0, 0, LOOKS[look]); g.restore(); }
+function shade(g, a = 0.55) { g.fillStyle = `rgba(8,14,10,${a})`; g.fillRect(0, 0, CFG.W, CFG.H); }
+
+function drawTitle(g) {
+  shade(g, 0.45);
+  const t = Game.time;
+  txt(g, 'PROTEGIENDO EL', CFG.W / 2, 92, 26, '#c9d6b0', 'center');
+  g.font = `bold 66px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'top';
+  g.fillStyle = '#2a1a0c'; g.fillText('ÑEMBI GUASU', CFG.W / 2 + 5, 129);
+  g.fillStyle = '#e9a43b'; g.fillText('ÑEMBI GUASU', CFG.W / 2, 124);
+  txt(g, 'Un día de guardaparque en el bosque seco', CFG.W / 2, 208, 16, '#f1e7c9', 'center', 'normal');
+  bigPerson(g, CFG.W / 2 - 300, 330, 'ranger', 6);
+  bigPerson(g, CFG.W / 2 + 300, 330, 'lucia', 6);
+  panel(g, CFG.W / 2 - 200, 262, 400, 112);
+  if (Math.floor(t * 2) % 2 === 0) txt(g, Touch.on ? 'TOCA   Comenzar la jornada' : 'ENTER   Comenzar la jornada', CFG.W / 2, 284, 18, '#ffe6a0', 'center');
+  txt(g, Touch.on ? 'Toca aquí: ver controles' : 'C   Ver controles', CFG.W / 2, 322, 16, '#c9d6b0', 'center');
+  txt(g, 'Una jornada dura unos 4 minutos reales.', CFG.W / 2, 420, 13, '#c9d6b0', 'center', 'normal');
+  txt(g, Touch.on ? 'Mejor en horizontal: joystick a la izquierda, acciones a la derecha.' : 'Si el teclado no responde, haz clic sobre el juego.', CFG.W / 2, 442, 13, '#aab59c', 'center', 'normal');
+}
+function drawControls(g) {
+  shade(g, 0.7);
+  panel(g, 60, 40, CFG.W - 120, CFG.H - 80, 0.95);
+  txt(g, 'CONTROLES', 100, 66, 22, '#e9a43b');
+  const c = Touch.on ? [['Joystick', 'Caminar (arrastra el círculo)'], ['Botón E', 'Usar herramienta, hablar, recargar'], ['Mantener E', 'Documentar tala o abrir cortafuego'], ['1  2  3', 'Cámara · Agua · Rastrillo'], ['Sonido', 'Silenciar o activar el sonido'], ['Pausa', 'Pausar el juego']] : [['WASD / Flechas', 'Caminar'], ['E', 'Usar herramienta, hablar, recargar'], ['Mantener E', 'Documentar tala o abrir cortafuego'], ['1  2  3', 'Cámara · Agua · Rastrillo'], ['M', 'Silenciar sonido'], ['P / Esc', 'Pausa']];
+  c.forEach(([k, v], i) => { txt(g, k, 100, 110 + i * 30, 15, '#ffe6a0'); txt(g, v, 290, 110 + i * 30, 15, '#f1e7c9', 'left', 'normal'); });
+  txt(g, 'TU TRABAJO', 100, 302, 22, '#e9a43b');
+  const w = ['Patrulla: sigue el humo, el sonido de motosierras y los avisos de radio.',
+    'Tala ilegal: encuentra el claro, documéntalo (1 + mantener E) y denuncia en Ñembi Misi.',
+    'Incendio: el fuego avanza con el viento. Rocía agua (2) o abre un cortafuego (3).',
+    'Comunidad: conversa con los vecinos. Con más confianza, te avisan de las talas.'];
+  w.forEach((s, i) => txt(g, '· ' + s, 100, 344 + i * 26, 14, '#f1e7c9', 'left', 'normal'));
+  txt(g, Touch.on ? 'Toca para comenzar' : 'ENTER: comenzar     ESC: volver', CFG.W / 2, CFG.H - 76, 15, '#ffe6a0', 'center');
+}
+function drawBriefing(g) {
+  shade(g, 0.55);
+  const b = Game.briefing, x = 130, y = 54, w = CFG.W - 260, h = CFG.H - 108;
+  panel(g, x, y, w, h, 0.96);
+  txt(g, 'INFORME DE LA MAÑANA · 06:00', x + 30, y + 24, 20, '#e9a43b');
+  txt(g, 'Campamento base Ñembi Misi · Ñembi Guasu', x + 30, y + 52, 13, '#c9d6b0', 'left', 'normal');
+  let yy = y + 86;
+  for (const l of b) {
+    const lines = wrap(g, l.s, w - 80, 14);
+    px(g, x + 30, yy + 4, l.c, 8, 8);
+    lines.forEach((s, j) => txt(g, s, x + 48, yy + j * 19, 14, '#f1e7c9', 'left', 'normal'));
+    yy += lines.length * 19 + 10;
+  }
+  if (Math.floor(Game.time * 2) % 2 === 0) txt(g, Touch.on ? 'Toca para salir a patrullar' : 'ENTER: salir a patrullar', CFG.W / 2, y + h - 40, 16, '#ffe6a0', 'center');
+}
+function makeBriefing() {
+  const wTo = DIR_NAMES[(Game.windFrom + 4) % 8];
+  return [
+    { c: '#ff8a6a', s: `Clima: muy seco, humedad del ${Game.humidity} %. Riesgo de incendio: ALTO.` },
+    { c: '#9fd0f0', s: `Viento del ${DIR_NAMES[Game.windFrom]}, ${Game.windLabel()}: un fuego avanzaría hacia el ${wTo}.` },
+    { c: '#ffb04a', s: `Puntos de calor detectados por satélite: ${Game.heat[0].name} y ${Game.heat[1].name}.` },
+    { c: '#d8a6ff', s: 'Vecinos reportan tala ilegal en el monte. Escucha las motosierras y busca claros recientes.' },
+    { c: '#c9d6b0', s: 'Don Ramón planea quemar el rastrojo de su chaco después del mediodía. Conviene hablar con él.' },
+    { c: '#5db0e8', s: `Llevas ${CFG.WATER_MAX} cargas de agua. Recarga en la laguna (oeste) o en el tanque de Ñembi Misi.` },
+  ];
+}
+function drawDialog(g) {
+  const d = Game.dialog, [who, text] = d.lines[d.i];
+  const x = 70, y = CFG.H - 180, w = CFG.W - 140, h = 150;
+  panel(g, x, y, w, h, 0.96);
+  g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(x + 14, y + 14, 110, 122);
+  bigPerson(g, x + 69, y + 122, SPEAKER_LOOK[who] || 'ranger', 5);
+  txt(g, who, x + 142, y + 18, 17, who === R ? '#a8e07a' : '#e9a43b');
+  wrap(g, text.slice(0, Math.floor(d.shown)), w - 180, 16).forEach((l, j) => txt(g, l, x + 142, y + 48 + j * 22, 16, '#f1e7c9', 'left', 'normal'));
+  if (d.shown >= text.length && Math.floor(Game.time * 3) % 2) txt(g, 'E ▸', x + w - 26, y + h - 30, 14, '#ffe6a0', 'right');
+}
+function drawPause(g) {
+  shade(g, 0.6); panel(g, CFG.W / 2 - 170, CFG.H / 2 - 60, 340, 120);
+  txt(g, 'PAUSA', CFG.W / 2, CFG.H / 2 - 36, 26, '#e9a43b', 'center');
+  txt(g, Touch.on ? 'Toca la pantalla para continuar' : 'P o ESC para continuar', CFG.W / 2, CFG.H / 2 + 10, 14, '#f1e7c9', 'center', 'normal');
+}
+function computeSummary() {
+  const fp = forestPct();
+  let burnt = 0; for (let i = 0; i < World.tiles.length; i++) if (World.tiles[i] === TL.BURNT || World.burn[i] > 0) burnt++;
+  const fires = Game.incidents.length;
+  const ctrl = Game.incidents.filter(i => i.done && i.helped).length;
+  const detected = Game.sites.filter(s => s.discovered).length, total = Game.sites.filter(s => s.active).length;
+  const score = fp * 0.5 + Game.trust * 0.3 + Game.reports * 7 + ctrl * 6;
+  const rank = score >= 92 ? 'Guardián del Ñembi Guasu' : score >= 80 ? 'Guardaparque ejemplar' : score >= 66 ? 'Buen turno de patrulla' : 'Jornada difícil: el bosque necesita más manos';
+  return { fp, burnt, fires, ctrl, detected, total, reports: Game.reports, trust: Math.round(Game.trust), rank, breaks: Game.breaks, fact: pick(FACTS) };
+}
+function drawSummary(g) {
+  shade(g, 0.78);
+  const s = Game.summary, x = 110, y = 34, w = CFG.W - 220;
+  panel(g, x, y, w, CFG.H - 68, 0.97);
+  txt(g, 'FIN DE LA JORNADA · 20:00', x + 30, y + 24, 22, '#e9a43b');
+  txt(g, s.rank, x + 30, y + 56, 16, '#ffe6a0');
+  const rows = [
+    ['Bosque salvado', `${s.fp} %`, s.fp > 85 ? '#a8e07a' : '#f2c35a'],
+    ['Incendios controlados', `${s.ctrl} de ${s.fires}`, '#ff8a6a'],
+    ['Hectáreas quemadas', `${s.burnt} ha`, '#ff8a6a'],
+    ['Talas detectadas', `${s.detected} de ${s.total}`, '#d8a6ff'],
+    ['Denuncias presentadas', `${s.reports}`, '#d8a6ff'],
+    ['Confianza de la comunidad', `${s.trust} %`, '#f2c35a'],
+    ['Casillas de cortafuego', `${s.breaks}`, '#c9d6b0'],
+  ];
+  rows.forEach(([k, v, c], i) => {
+    const yy = y + 96 + i * 30;
+    g.fillStyle = i % 2 ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.07)'; g.fillRect(x + 24, yy - 4, w - 48, 28);
+    txt(g, k, x + 36, yy + 2, 15, '#f1e7c9', 'left', 'normal'); txt(g, v, x + w - 36, yy + 1, 16, c, 'right');
+  });
+  const fy = y + 96 + rows.length * 30 + 14;
+  txt(g, 'DATO REAL', x + 30, fy, 13, '#9fd0f0');
+  wrap(g, s.fact, w - 60, 14).forEach((l, j) => txt(g, l, x + 30, fy + 22 + j * 19, 14, '#f1e7c9', 'left', 'normal'));
+  if (Math.floor(Game.time * 2) % 2 === 0) txt(g, Touch.on ? 'Toca para jugar otra jornada' : 'ENTER: jugar otra jornada', CFG.W / 2, CFG.H - 70, 16, '#ffe6a0', 'center');
+}
+
+/* ===================== 13. BUCLE PRINCIPAL ===================== */
+function newGame() {
+  genMap(); Player.reset(); resetNPCs(); Particles.list = [];
+  Object.assign(Game, {
+    clock: CFG.DAY_START, trust: CFG.TRUST_START, reports: 0, waterUsed: 0, breaks: 0, treesCutForBreak: 0,
+    messages: [], incidents: [], loggers: [], dialog: null, prompt: null, fireTimer: 0, crackleT: 0,
+    ramonConvinced: false, ramonFired: false, summary: null,
+    windFrom: pick([0, 1, 2, 7]), windStr: 0.85 + rnd() * 0.35, humidity: ri(12, 22), dryness: 1.15,
+  });
+  Game.heat = shuffle(LM.heatZones.slice()).slice(0, 2);
+  Game.sites = shuffle(LM.logSites.filter(s => !Game.heat.some(h => h.name === s.name))).slice(0, 3)
+    .map(s => ({ ...s, active: false, discovered: false, known: false, documented: false, reported: false, stumps: [], docStumps: 0 }));
+  Game.events = buildSchedule();
+  Game.briefing = makeBriefing();
+  Game.state = 'briefing';
+  updateCamera();
+}
+function endDay() {
+  Game.state = 'summary'; Game.summary = computeSummary(); Game.dialog = null; Player.action = null;
+  Sound.sfx('end');
+}
+function setTool(n) { if (Player.tool !== n) { Player.tool = n; Player.action = null; Sound.sfx('select'); } }
+function toggleMute() {
+  Sound.init(); Sound.setMuted(!Sound.muted);
+  muteBtn.textContent = Sound.muted ? 'Sonido: silenciado' : 'Sonido: activado';
+  muteBtn.setAttribute('aria-pressed', String(Sound.muted));
+  const m2 = document.getElementById('muteBtn2');
+  m2.textContent = Sound.muted ? 'Silencio' : 'Sonido'; m2.setAttribute('aria-pressed', String(Sound.muted));
+}
+// Tocar o hacer clic en el juego: avanza menús y diálogos
+function canvasTap(x, y) {
+  if (Game.stateT < 0.4) return;
+  switch (Game.state) {
+    case 'title': Input.tap(y > 306 && y < 356 && Math.abs(x - CFG.W / 2) < 200 ? 'c' : 'enter'); break;
+    case 'controls': case 'briefing': Input.tap('enter'); break;
+    case 'summary': if (Game.stateT > 1.5) Input.tap('enter'); break;
+    case 'paused': Input.tap('p'); break;
+    case 'play': if (Game.dialog) Input.tap('e'); break;
+  }
+}
+function updatePlay(dt) {
+  Game.clock += dt * MIN_PER_SEC;
+  if (Game.clock >= CFG.DAY_END) { Game.clock = CFG.DAY_END; endDay(); return; }
+  runEvents();
+  if (Input.hit('1')) setTool(1); if (Input.hit('2')) setTool(2); if (Input.hit('3')) setTool(3);
+  let mx = 0, my = 0;
+  if (Input.isDown('arrowleft', 'a')) mx -= 1;
+  if (Input.isDown('arrowright', 'd')) mx += 1;
+  if (Input.isDown('arrowup', 'w')) my -= 1;
+  if (Input.isDown('arrowdown', 's')) my += 1;
+  if (Math.hypot(Touch.jx, Touch.jy) > 0.22) { mx += Touch.jx; my += Touch.jy; } // joystick táctil
+  const moving = !!(mx || my);
+  if (moving) {
+    const l = Math.hypot(mx, my), mag = Math.min(1, l * 1.2);
+    const ti = TILE_INFO[tileAt(Math.floor(Player.x), Math.floor(Player.y - 0.1))];
+    const sp = CFG.PLAYER_SPEED * (ti.speed || 1) * dt * mag;
+    moveEntity(Player, mx / l * sp, my / l * sp);
+    const hd = mx < 0 ? 1 : 2, vd = my < 0 ? 3 : 0, ax = Math.abs(mx), ay = Math.abs(my);
+    if (ax > ay * 1.2) Player.dir = hd; else if (ay > ax * 1.2) Player.dir = vd;
+    else if (Player.dir !== hd && Player.dir !== vd) Player.dir = vd;
+    Player.stepT -= dt; if (Player.stepT <= 0) { Player.stepT = 0.32; Sound.sfx('step'); }
+  }
+  animate(Player, dt, moving);
+  updateTools(dt);
+  updateNPCs(dt); updateLoggers(dt); Fire.update(dt); Particles.update(dt);
+  for (const m of Game.messages) m.t += dt;
+  Game.messages = Game.messages.filter(m => m.t < 9);
+  Game.crackleT -= dt;
+  if (Game.crackleT <= 0) { Game.crackleT = 0.6; const nb = Fire.nearestBurning(Player.x, Player.y, 10); if (nb) Sound.sfx('crackle', clamp(1 - nb.d / 10, 0.15, 1)); }
+  updateCamera();
+}
+function update(dt) {
+  if (Game.state !== Game.lastState) { Game.lastState = Game.state; Game.stateT = 0; }
+  Game.stateT += dt;
+  if (Input.hit('m')) toggleMute();
+  switch (Game.state) {
+    case 'title':
+      cam.x = (Math.sin(Game.time * 0.05) * 0.5 + 0.5) * (World.w * T - VIEW_W);
+      cam.y = (Math.cos(Game.time * 0.04) * 0.5 + 0.5) * (World.h * T - VIEW_H);
+      Fire.update(dt); Particles.update(dt);
+      if (Input.hit('enter', ' ')) { newGame(); Sound.sfx('select'); }
+      else if (Input.hit('c')) { Game.state = 'controls'; Sound.sfx('blip'); }
+      break;
+    case 'controls':
+      if (Input.hit('enter', ' ')) { newGame(); Sound.sfx('select'); }
+      else if (Input.hit('escape', 'c')) { Game.state = 'title'; Sound.sfx('blip'); }
+      break;
+    case 'briefing':
+      if (Input.hit('enter', ' ', 'e')) { Game.state = 'play'; Sound.sfx('select'); msg('Sal a patrullar: mira el humo, escucha el monte y decide a dónde ir primero.', 'radio'); }
+      break;
+    case 'play':
+      if (Input.hit('p', 'escape')) { Game.state = 'paused'; Sound.sfx('blip'); break; }
+      if (Game.dialog) { updateDialog(dt); Game.prompt = null; break; }
+      updatePlay(dt);
+      break;
+    case 'paused':
+      if (Input.hit('p', 'escape', 'enter')) { Game.state = 'play'; Sound.sfx('blip'); }
+      break;
+    case 'summary':
+      if (Input.hit('enter') && Game.stateT > 1.2) { newGame(); Sound.sfx('select'); } // pausa breve para leer el resumen
+      break;
+  }
+}
+function render() {
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, CFG.W, CFG.H);
+  renderWorld(ctx);
+  drawTint(ctx);
+  switch (Game.state) {
+    case 'title': drawTitle(ctx); break;
+    case 'controls': drawControls(ctx); break;
+    case 'briefing': drawBriefing(ctx); break;
+    case 'summary': drawSummary(ctx); break;
+    default:
+      drawHUD(ctx);
+      if (Game.dialog) drawDialog(ctx);
+      if (Game.state === 'paused') drawPause(ctx);
+  }
+}
+let lastT = 0;
+function frame(now) {
+  const dt = Math.min(0.05, (now - lastT) / 1000 || 0); lastT = now;
+  Game.time += dt;
+  try { update(dt); render(); Touch.sync(); } catch (err) { console.error(err); }
+  Input.endFrame();
+  requestAnimationFrame(frame);
+}
+function init() {
+  buildSprites(); genMap(); resetNPCs(); Player.reset();
+  // Fondo de la pantalla de título: un pequeño fuego lejano para dar ambiente
+  Game.heat = LM.heatZones.slice(0, 2);
+  Input.init(); Touch.init();
+  muteBtn.addEventListener('click', () => { toggleMute(); canvas.focus(); });
+  canvas.addEventListener('pointerdown', e => {
+    canvas.focus(); Sound.init(); Sound.resume();
+    const r = canvas.getBoundingClientRect();
+    canvasTap((e.clientX - r.left) * CFG.W / r.width, (e.clientY - r.top) * CFG.H / r.height);
+  });
+  canvas.focus();
+  requestAnimationFrame(t => { lastT = t; requestAnimationFrame(frame); });
+}
+// Acceso para pruebas desde la consola
+window.__ranger = { Game, Player, World, Fire, LM, NPCS: () => NPCS, newGame, startFire, startLogging, endDay,
+  Touch, canvasTap,
+  step(n = 1, dt = 1 / 60) { for (let k = 0; k < n; k++) { Game.time += dt; update(dt); Input.endFrame(); } render(); Touch.sync(); } };
+init();
+</script>
+</body>
+</html>
